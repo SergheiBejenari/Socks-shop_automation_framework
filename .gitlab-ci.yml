@@ -1,0 +1,74 @@
+stages:
+  - validate
+  - test
+  - report
+
+variables:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+  TEST_ENV: "ci"
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .gradle/
+    - build/
+
+validate:configuration:
+  stage: validate
+  image: openjdk:17-jdk-slim
+  before_script:
+    - apt-get update && apt-get install -y curl wget unzip
+  script:
+    - echo "Validating configuration files..."
+    - ./gradlew test --tests "ConfigLayerTest"
+  artifacts:
+    paths:
+      - build/test-results/
+    expire_in: 1 week
+
+test:all:
+  stage: test
+  image: openjdk:17-jdk-slim
+  before_script:
+    - apt-get update && apt-get install -y curl wget unzip
+  script:
+    - echo "Running all tests..."
+    - export ENV=$TEST_ENV
+    - ./gradlew test
+  artifacts:
+    paths:
+      - build/test-results/
+    expire_in: 2 weeks
+
+test:configuration:
+  stage: test
+  image: openjdk:17-jdk-slim
+  before_script:
+    - apt-get update && apt-get install -y curl wget unzip
+  script:
+    - echo "Testing configuration module..."
+    - export ENV=$TEST_ENV
+    - ./gradlew test --tests "ConfigLayerTest"
+  artifacts:
+    paths:
+      - build/test-results/
+    expire_in: 2 weeks
+
+report:allure:
+  stage: report
+  image: openjdk:17-jdk-slim
+  before_script:
+    - apt-get update && apt-get install -y curl wget unzip
+  dependencies:
+    - test:all
+    - test:configuration
+  script:
+    - echo "Generating Allure test report..."
+    - curl -o allure-commandline.zip -Ls https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/2.21.0/allure-commandline-2.21.0.zip
+    - unzip -q allure-commandline.zip -d allure-commandline
+    - export PATH="$PWD/allure-commandline/allure-2.21.0/bin:$PATH"
+    - allure generate build/allure-results --clean -o build/allure-report
+  artifacts:
+    paths:
+      - build/allure-report/
+    expire_in: 1 month

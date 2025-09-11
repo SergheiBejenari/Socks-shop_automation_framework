@@ -1,0 +1,257 @@
+# =============================================================================
+# GitLab CI/CD Pipeline for Test Automation Framework
+# =============================================================================
+# 
+# This pipeline demonstrates CI/CD best practices for test automation:
+# - Multi-stage pipeline with parallel execution
+# - Environment-specific configurations
+# - Test reporting with Allure
+# - Security scanning
+# =============================================================================
+
+stages:
+  - validate
+  - test
+  - report
+  - deploy
+
+variables:
+  # Gradle configuration
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
+  
+  # Test configuration
+  TEST_ENV: "ci"
+  PARALLEL_TESTS: "true"
+  TEST_THREAD_COUNT: "4"
+  
+  # Allure configuration
+  ALLURE_VERSION: "2.21.0"
+  ALLURE_RESULTS_DIR: "build/allure-results"
+  ALLURE_REPORT_DIR: "build/allure-report"
+
+# =============================================================================
+# Cache configuration for faster builds
+# =============================================================================
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .gradle/
+    - build/
+    - .m2/
+
+# =============================================================================
+# Validate Stage - Code Quality & Dependencies
+# =============================================================================
+validate:code-quality:
+  stage: validate
+  image: openjdk:17-jdk-slim
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - echo "Validating code quality..."
+    - java -version
+    - ./gradlew --version
+    - ./gradlew dependencies --configuration compileClasspath
+  artifacts:
+    paths:
+      - build/reports/
+    expire_in: 1 week
+  allow_failure: true
+
+validate:configuration:
+  stage: validate
+  image: openjdk:17-jdk-slim
+  script:
+    - echo "Validating configuration files..."
+    - ./gradlew test --tests "ConfigLayerTest" --info
+  artifacts:
+    paths:
+      - build/test-results/
+    expire_in: 1 week
+
+# =============================================================================
+# Test Stage - Parallel Test Execution
+# =============================================================================
+test:unit:
+  stage: test
+  image: openjdk:17-jdk-slim
+  parallel: 2
+  script:
+    - echo "Running unit tests (parallel execution $CI_NODE_INDEX/$CI_NODE_TOTAL)..."
+    - export ENV=$TEST_ENV
+    - export TEST_PARALLEL=$PARALLEL_TESTS
+    - export TEST_THREAD_COUNT=$TEST_THREAD_COUNT
+    - ./gradlew test --tests "*UnitTest*" --parallel --max-workers=2
+  artifacts:
+    reports:
+      junit: build/test-results/test/**/TEST-*.xml
+    paths:
+      - build/test-results/
+      - build/reports/tests/
+    expire_in: 2 weeks
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  allow_failure: false
+
+test:integration:
+  stage: test
+  image: openjdk:17-jdk-slim
+  parallel: 2
+  script:
+    - echo "Running integration tests (parallel execution $CI_NODE_INDEX/$CI_NODE_TOTAL)..."
+    - export ENV=$TEST_ENV
+    - export TEST_PARALLEL=$PARALLEL_TESTS
+    - export TEST_THREAD_COUNT=$TEST_THREAD_COUNT
+    - ./gradlew test --tests "*IntegrationTest*" --parallel --max-workers=2
+  artifacts:
+    reports:
+      junit: build/test-results/test/**/TEST-*.xml
+    paths:
+      - build/test-results/
+      - build/reports/tests/
+    expire_in: 2 weeks
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  allow_failure: false
+
+test:configuration:
+  stage: test
+  image: openjdk:17-jdk-slim
+  script:
+    - echo "Testing configuration module..."
+    - export ENV=$TEST_ENV
+    - ./gradlew test --tests "ConfigLayerTest" --info
+  artifacts:
+    reports:
+      junit: build/test-results/test/**/TEST-*.xml
+    paths:
+      - build/test-results/
+      - build/reports/tests/
+    expire_in: 2 weeks
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  allow_failure: false
+
+# =============================================================================
+# Report Stage - Test Reporting & Analysis
+# =============================================================================
+report:allure:
+  stage: report
+  image: openjdk:17-jdk-slim
+  dependencies:
+    - test:unit
+    - test:integration
+    - test:configuration
+  script:
+    - echo "Generating Allure test report..."
+    - curl -o allure-commandline.zip -Ls https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/$ALLURE_VERSION/allure-commandline-$ALLURE_VERSION.zip
+    - unzip -q allure-commandline.zip -d allure-commandline
+    - export PATH="$PWD/allure-commandline/allure-$ALLURE_VERSION/bin:$PATH"
+    - allure generate $ALLURE_RESULTS_DIR --clean -o $ALLURE_REPORT_DIR
+  artifacts:
+    paths:
+      - $ALLURE_REPORT_DIR/
+    expire_in: 1 month
+  coverage: '/Total.*?([0-9]{1,3})%/'
+
+report:coverage:
+  stage: report
+  image: openjdk:17-jdk-slim
+  dependencies:
+    - test:unit
+    - test:integration
+    - test:configuration
+  script:
+    - echo "Generating coverage report..."
+    - ./gradlew jacocoTestReport
+  artifacts:
+    paths:
+      - build/reports/jacoco/
+    expire_in: 1 month
+  coverage: '/Total.*?([0-9]{1,3})%/'
+
+# =============================================================================
+# Deploy Stage - Artifact Deployment
+# =============================================================================
+deploy:artifacts:
+  stage: deploy
+  image: openjdk:17-jdk-slim
+  dependencies:
+    - report:allure
+    - report:coverage
+  script:
+    - echo "Deploying test artifacts..."
+    - ./gradlew clean build
+    - mkdir -p deployment
+    - cp -r build/allure-report deployment/
+    - cp -r build/reports deployment/
+    - cp build/libs/*.jar deployment/
+    - echo "Build: $CI_COMMIT_SHA" > deployment/manifest.txt
+    - echo "Branch: $CI_COMMIT_REF_NAME" >> deployment/manifest.txt
+    - echo "Pipeline: $CI_PIPELINE_ID" >> deployment/manifest.txt
+    - echo "Timestamp: $(date)" >> deployment/manifest.txt
+    - echo "Artifacts deployed successfully"
+  artifacts:
+    paths:
+      - deployment/
+    expire_in: 1 month
+  only:
+    - main
+    - develop
+  when: manual
+
+# =============================================================================
+# Environment-specific Jobs
+# =============================================================================
+test:dev-environment:
+  stage: test
+  image: openjdk:17-jdk-slim
+  environment:
+    name: development
+    url: https://dev.example.com
+  script:
+    - echo "Testing against DEV environment..."
+    - export ENV=dev
+    - ./gradlew test --tests "*DevTest*" --info
+  artifacts:
+    paths:
+      - build/test-results/
+    expire_in: 1 week
+  allow_failure: true
+  only:
+    - develop
+
+test:staging-environment:
+  stage: test
+  image: openjdk:17-jdk-slim
+  environment:
+    name: staging
+    url: https://staging.example.com
+  script:
+    - echo "Testing against STAGING environment..."
+    - export ENV=stage
+    - ./gradlew test --tests "*StagingTest*" --info
+  artifacts:
+    paths:
+      - build/test-results/
+    expire_in: 1 week
+  allow_failure: true
+  only:
+    - main
+    - develop
+
+# =============================================================================
+# Cleanup Jobs
+# =============================================================================
+cleanup:artifacts:
+  stage: .post
+  image: alpine:latest
+  script:
+    - echo "Cleaning up old artifacts..."
+    - find . -name "*.tmp" -delete
+    - find . -name "*.log" -delete
+    - find build/ -name "*.xml" -mtime +30 -delete
+  when: always
+  allow_failure: true
+  only:
+    - main
+    - develop

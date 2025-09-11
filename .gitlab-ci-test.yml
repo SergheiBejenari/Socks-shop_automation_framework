@@ -1,0 +1,30 @@
+stages:
+  - test
+  - report
+
+variables:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+test:configuration:
+  stage: test
+  image: openjdk:17-jdk-slim
+  script:
+    - echo "Testing configuration module..."
+    - ./gradlew test --tests "ConfigLayerTest"
+  artifacts:
+    paths:
+      - build/test-results/
+    expire_in: 1 week
+
+report:allure:
+  stage: report
+  image: openjdk:17-jdk-slim
+  dependencies:
+    - test:configuration
+  script:
+    - echo "Generating Allure report..."
+    - ./gradlew allureReport
+  artifacts:
+    paths:
+      - build/allure-report/
+    expire_in: 1 month
