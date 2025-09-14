@@ -1,280 +1,328 @@
-# Configuration Manager Module
+# Configuration Provider Module
 
-Профессиональный модуль для работы с конфигурационными файлами, разработанный с учетом лучших практик SDET.
+A professional configuration management module designed with SDET best practices in mind.
 
-## 🎯 Основные возможности
+## 🎯 Key Features
 
-- **Многоуровневое разрешение конфигурации** с приоритетом источников
-- **Профили окружения** (dev, test, qa, stage, prod)
-- **Кэширование** для повышения производительности
-- **Валидация конфигурации** с детальной отчетностью
-- **Безопасная работа** с чувствительными данными
-- **Метрики и мониторинг** доступа к конфигурации
-- **Thread-safe** операции для многопоточных сред
+- **Multi-layered configuration resolution** with source priority
+- **Environment profiles** (local, dev, ci, qa, stage, prod)
+- **Caching** for improved performance
+- **Configuration validation** with detailed reporting
+- **Secure handling** of sensitive data
+- **Metrics and monitoring** for configuration access
+- **Thread-safe** operations for multi-threaded environments
 
-## 🚀 Быстрый старт
+## 🚀 Quick Start
 
-### 1. Сборка и тестирование
+### 1. Build and Testing
 
 ```bash
-# Сборка проекта
+# Build project
 ./gradlew clean build
 
-# Запуск всех тестов
+# Run all tests
 ./gradlew test
 
-# Запуск тестов с профилем
+# Run tests with profile
 ./gradlew test -Denv=test
 
-# Запуск конкретного теста
-./gradlew test --tests ConfigLayerTest
+# Run specific test
+./gradlew test --tests ConfigProviderTest
 
-# Запуск с переопределением конфигурации
-./gradlew test -Dbase.url=https://custom.example.com -Dtimeout.seconds=60
+# Run with configuration override
+./gradlew test -DbaseUrlApi=https://custom.example.com -DreadTimeoutMs=60000
 ```
 
-### 2. Запуск тестов
+### 2. Running Tests
 
 ```bash
-# Запуск всех тестов
+# Run all tests
 ./gradlew test
 
-# Запуск конкретного теста
-./gradlew test --tests ConfigLayerTest
+# Run specific test
+./gradlew test --tests ConfigProviderTest
 
-# Запуск с детальным выводом
+# Run with detailed output
 ./gradlew test --info
 ```
 
-### 3. Сборка проекта
+### 3. Project Build
 
 ```bash
-# Очистка и сборка
+# Clean and build
 ./gradlew clean build
 
-# Создание JAR файла
+# Create JAR file
 ./gradlew jar
 ```
 
-## 🏗️ Архитектура
+## 🏗️ Architecture
 
-### Основные компоненты
+### Core Components
 
 ```
-ConfigManager     - Основной менеджер конфигурации
-├── ConfigCache   - Кэш для типизированных значений
-├── ConfigLoader  - Загрузчик файлов конфигурации
-├── ConfigValidator - Валидатор конфигурации
-├── ConfigLogger  - Логирование конфигурации
-└── ConfigKeys    - Enum с ключами конфигурации
+ConfigProvider          - Main configuration provider with type-safe access
+├── CompositeConfig     - Composite configuration source with priorities
+├── ConfigSource        - Configuration source interface
+│   ├── EnvConfigSource           - Environment variables
+│   ├── SystemPropsConfigSource   - System properties
+│   ├── PropertiesFileConfigSource - Properties files
+│   └── DotEnvFileConfigSource     - .env files
+├── ConfigKey           - Enum with keys and validation
+├── ConfigLogging       - Specialized logging
+└── SecretMasker        - Sensitive data masking
 ```
 
-### Приоритет источников конфигурации
+### Configuration Source Priority
 
-1. **System Properties** (`-Dkey=value`) - высший приоритет
-2. **Environment Variables** (`ENV_VAR_NAME`)
-3. **`.env` файл** (для локальной разработки)
-4. **Профильные файлы** (`config-{env}.properties`)
-5. **Основной файл** (`config.properties`)
-6. **Значения по умолчанию** из `ConfigKeys` enum
+1. **Environment Variables** (`ENV_VAR_NAME`) - highest priority
+2. **System Properties** (`-Dkey=value`) 
+3. **Profile files** (`application-{env}.properties`)
+4. **Base file** (`application.properties`)
+5. **`.env` file** (for local development)
+6. **Default values** from `ConfigKey` enum
 
-## 📁 Структура конфигурационных файлов
+## 📁 Configuration File Structure
 
-### Основной файл: `config.properties`
+### Base file: `application.properties`
 ```properties
-# Базовые настройки для всех окружений
-base.url=https://example.com
-timeout.seconds=30
-browser=chrome
+# Base settings for all environments
+baseUrlApi=http://localhost:8080/api
+baseUrlUi=http://localhost:8080
+readTimeoutMs=30000
+connectTimeoutMs=10000
+logLevel=INFO
+headless=true
+browserType=CHROME
+appEnv=local
+basicAuthUser=admin
+basicAuthPassword=admin123
 ```
 
-### Профильные файлы: `config-{env}.properties`
+### Profile files: `application-{env}.properties`
+
+#### `application-local.properties`
 ```properties
-# config-dev.properties
-base.url=http://localhost:3000
-log.level=DEBUG
+# Local development
+baseUrlApi=http://localhost:8080
+baseUrlUi=http://localhost:8080
+logLevel=DEBUG
+headless=false
+```
 
-# config-test.properties
-base.url=https://test.example.com
-timeout.seconds=15
-browser.headless=true
+#### `application-dev.properties`
+```properties
+# Development environment
+baseUrlApi=https://dev-api.example.com
+baseUrlUi=https://dev.example.com
+logLevel=DEBUG
+headless=true
+```
 
-# config-prod.properties
-base.url=https://app.example.com
-log.level=WARN
-browser.headless=true
+#### `application-ci.properties`
+```properties
+# CI/CD environment
+baseUrlApi=https://ci-api.example.com
+baseUrlUi=https://ci.example.com
+logLevel=INFO
+headless=true
+browserType=CHROME
+```
+
+#### `application-qa.properties`
+```properties
+# QA environment
+baseUrlApi=https://qa-api.example.com
+baseUrlUi=https://qa.example.com
+logLevel=INFO
+headless=true
+```
+
+#### `application-stage.properties`
+```properties
+# Staging environment
+baseUrlApi=https://stage-api.example.com
+baseUrlUi=https://stage.example.com
+logLevel=WARN
+headless=true
+```
+
+#### `application-prod.properties`
+```properties
+# Production environment
+baseUrlApi=https://api.example.com
+baseUrlUi=https://example.com
+logLevel=ERROR
+headless=true
 ```
 
 ## 🔧 API Reference
 
-### ConfigCache - Кэшированный доступ
+### ConfigProvider - Main Configuration Access
 
 ```java
-// Типизированные геттеры
-String value = ConfigCache.getString(ConfigKeys.KEY);
-int number = ConfigCache.getInt(ConfigKeys.NUMBER);
-boolean flag = ConfigCache.getBoolean(ConfigKeys.FLAG);
-double decimal = ConfigCache.getDouble(ConfigKeys.DECIMAL);
-long bigNumber = ConfigCache.getLong(ConfigKeys.BIG_NUMBER);
+// Get configuration through type-safe methods
+URI apiUrl = ConfigProvider.baseUrlApi();
+URI uiUrl = ConfigProvider.baseUrlUi();
+int timeout = ConfigProvider.readTimeoutMs();
+String logLevel = ConfigProvider.logLevel();
+boolean headless = ConfigProvider.headless();
+String browserType = ConfigProvider.browserType();
+String environment = ConfigProvider.appEnv();
 
-// Кастомные типы
-Duration timeout = ConfigCache.get(ConfigKeys.TIMEOUT, 
-    value -> Duration.ofSeconds(Long.parseLong(value)));
+// Authentication
+String username = ConfigProvider.basicAuthUser();
+String password = ConfigProvider.basicAuthPassword();
 
-// Управление кэшем
-ConfigCache.clear();           // Очистить весь кэш
-ConfigCache.remove(ConfigKeys.KEY); // Удалить конкретный ключ
-int size = ConfigCache.size(); // Размер кэша
-boolean cached = ConfigCache.isCached(ConfigKeys.KEY); // Проверить наличие в кэше
+// Reload configuration at runtime
+ConfigProvider.reload();
+
+// Get full configuration dump with secret masking
+String configDump = ConfigProvider.dumpMasked();
+System.out.println(configDump);
 ```
 
-### ConfigManager - Основные операции
+### ConfigKey - Configuration Keys Enumeration
 
 ```java
-// Разрешение конфигурации
-String value = ConfigManager.resolve(ConfigKeys.KEY);
+// Each key contains:
+// - Environment variable name
+// - System property name  
+// - Default value
+// - Value parser
+// - Validator
+// - Secret flag
 
-// Обновление конфигурации
-ConfigManager.refresh();
+// Usage example
+ConfigKey key = ConfigKey.BASE_URL_API;
+String envVarName = key.getEnvVarName();     // "BASE_URL_API"
+String sysPropName = key.getSysPropName();   // "baseUrlApi"
+Object defaultValue = key.getDefault();      // URI.create("http://localhost:8080")
+boolean isSecret = key.isSecret();           // false
 
-// Проверка здоровья
-boolean healthy = ConfigManager.isHealthy();
-
-// Безопасное логирование (маскирует чувствительные данные)
-String safeValue = ConfigManager.getForLogging(ConfigKeys.KEY);
-
-// Метрики
-Map<String, Long> accessMetrics = ConfigManager.getAccessMetrics();
-Map<String, Long> errorMetrics = ConfigManager.getErrorMetrics();
-int cacheSize = ConfigManager.getCacheSize();
+// Parsing and validation
+Object parsed = key.parse("https://api.example.com");
+Object validated = key.validate(parsed);
 ```
 
-### ConfigValidator - Валидация
+### ConfigLogging - Specialized Logging
 
 ```java
-// Полная валидация с детальным отчетом
-ConfigValidator.ValidationResult result = ConfigValidator.validateAll();
-if (result.isValid()) {
-    System.out.println("✅ Конфигурация валидна");
-} else {
-    result.getErrors().forEach(System.err::println);
-    result.getWarnings().forEach(System.out::println);
-}
+// Log configuration initialization
+ConfigLogging.logConfigInit("local", "Building configuration snapshot");
 
-// Быстрая валидация (бросает исключение при ошибке)
-ConfigValidator.validateRequired();
+// Log value loading
+ConfigLogging.logConfigLoad("env", "BASE_URL_API", "https://api.example.com", false);
+
+// Log validation
+ConfigLogging.logValidation("PROXY_CONFIG", "Proxy configuration validation passed");
+
+// Log validation errors
+ConfigLogging.logValidationError("LOG_LEVEL", "INVALID", "Invalid log level");
+
+// Log default values
+ConfigLogging.logDefaultValue("APP_ENV", "local");
 ```
 
-### ConfigLogger - Логирование
+## 🧪 Testing
 
-```java
-// Логирование при старте
-ConfigLogger.logStartupConfiguration();
-
-// Детальное логирование (DEBUG уровень)
-ConfigLogger.logDetailedConfiguration();
-
-// Метрики доступа
-ConfigLogger.logMetrics();
-
-// Статус здоровья
-ConfigLogger.logHealthStatus();
-```
-
-## 🧪 Тестирование
-
-### Запуск тестов
+### Running Tests
 
 ```bash
-# Запуск всех тестов
+# Run all tests
 ./gradlew test
 
-# Запуск конкретного теста
-./gradlew test --tests ConfigLayerTest
+# Run specific test
+./gradlew test --tests ConfigProviderTest
 
-# Запуск с детальным выводом
+# Run with detailed output
 ./gradlew test --info
 ```
 
 ## 🚀 GitLab CI/CD
 
-### Автоматизированный Pipeline
+### Automated Pipeline
 
-Проект включает готовый GitLab CI/CD pipeline с следующими возможностями:
+The project includes a ready-to-use GitLab CI/CD pipeline with the following capabilities:
 
 - **Multi-stage pipeline**: validate → test → report
-- **Parallel test execution** для ускорения выполнения
+- **Parallel test execution** for faster execution
 - **Environment-specific testing** (dev, staging)
-- **Allure reporting** с красивыми отчетами
-- **Coverage reporting** с JaCoCo
-- **Artifact management** для результатов тестов
+- **Allure reporting** with beautiful reports
+- **Coverage reporting** with JaCoCo
+- **Artifact management** for test results
 
-### Доступные версии Pipeline
+### Available Pipeline Versions
 
-1. **`.gitlab-ci.yml`** - основная упрощенная версия (рекомендуется для начала)
-2. **`.gitlab-ci-full.yml`** - полная версия с расширенными возможностями
-3. **`.gitlab-ci-test.yml`** - минимальная версия для тестирования
+1. **`.gitlab-ci.yml`** - main simplified version (recommended for start)
+2. **`.gitlab-ci-full.yml`** - full version with extended capabilities
+3. **`.gitlab-ci-test.yml`** - minimal version for testing
 
 ### Pipeline Stages
 
 ```yaml
 stages:
-  - validate      # Валидация кода и конфигурации
-  - test         # Параллельное выполнение тестов
-  - report       # Генерация отчетов (Allure)
+  - validate      # Code and configuration validation
+  - test         # Parallel test execution
+  - report       # Report generation (Allure)
 ```
 
-### Запуск Pipeline
+### Pipeline Execution
 
-Pipeline автоматически запускается при:
-- Push в `main` или `develop` ветки
-- Создании Merge Request
-- Ручном запуске через GitLab UI
+Pipeline automatically runs on:
+- Push to `main` or `develop` branches
+- Merge Request creation
+- Manual trigger through GitLab UI
 
-### Переменные окружения
+### Environment Variables
 
 ```bash
-# Обязательные переменные
-TEST_ENV=ci                    # Окружение для тестов
-PARALLEL_TESTS=true           # Параллельное выполнение
-TEST_THREAD_COUNT=4           # Количество потоков
+# Required variables (updated names)
+APP_ENV=ci                    # Test environment (local, dev, ci, qa, stage, prod)
+PARALLEL_TESTS=true           # Parallel execution
+TEST_THREAD_COUNT=4           # Thread count
 
-# Опциональные переменные
-SLACK_WEBHOOK_URL=            # Webhook для уведомлений
+# Application configuration
+BASE_URL_UI=https://ci.example.com
+BASE_URL_API=https://ci-api.example.com
+DATABASE_URL=jdbc:mysql://ci-db:3306/socksdb
+
+# Optional variables
+SLACK_WEBHOOK_URL=            # Webhook for notifications
 ```
 
-### Структура тестов
+### Test Structure
 
-- **ConfigLayerTest** - Основные тесты конфигурационного модуля
-- **ConfigTestExtension** - JUnit 5 расширение для настройки тестового окружения
+- **ConfigProviderTest** - Main configuration module tests (32 tests)
+- **TestNG** - Uses TestNG instead of JUnit 5 for testing
 
-### Примеры тестов
+### Test Examples
 
 ```java
 @Test
-@DisplayName("Should resolve configuration from test profile")
-void shouldResolveConfigurationFromTestProfile() {
-    String baseUrl = ConfigManager.resolve(ConfigKeys.BASE_URL);
-    assertEquals("https://test.example.com", baseUrl);
+public void testDefaultValues() {
+    // Test default values from local profile
+    assertThat(ConfigProvider.baseUrlUi()).isEqualTo(URI.create("http://localhost:8080"));
+    assertThat(ConfigProvider.baseUrlApi()).isEqualTo(URI.create("http://localhost:8080"));
+    assertThat(ConfigProvider.logLevel()).isEqualTo("DEBUG");
+    assertThat(ConfigProvider.appEnv()).isEqualTo("local");
 }
 
 @Test
-@DisplayName("Should cache configuration values for performance")
-void shouldCacheConfigurationValuesForPerformance() {
-    ConfigCache.clear();
-    String firstCall = ConfigCache.getString(ConfigKeys.BASE_URL);
-    String secondCall = ConfigCache.getString(ConfigKeys.BASE_URL);
+public void testSystemPropertyOverride() {
+    // Test system property override
+    System.setProperty("readTimeoutMs", "15000");
+    ConfigProvider.reload();
     
-    assertEquals(firstCall, secondCall);
-    assertTrue(ConfigCache.isCached(ConfigKeys.BASE_URL));
+    assertThat(ConfigProvider.readTimeoutMs()).isEqualTo(15000);
 }
 ```
 
-## 🔒 Безопасность
+## 🔒 Security
 
-### Маскирование чувствительных данных
+### Sensitive Data Masking
 
-Автоматически маскируются ключи, содержащие:
+Keys containing the following are automatically masked:
 - `password`
 - `secret`
 - `token`
@@ -282,207 +330,229 @@ void shouldCacheConfigurationValuesForPerformance() {
 - `credential`
 - `auth`
 
-### Примеры
+### Examples
 
 ```java
-// В логах чувствительные значения отображаются как *****
-String dbPassword = ConfigManager.getForLogging(ConfigKeys.DB_PASSWORD);
-// Результат: *****
+// Safe configuration dump - secrets are automatically masked
+String configDump = ConfigProvider.dumpMasked();
+System.out.println(configDump);
+// Result: BASIC_AUTH_PASSWORD = se*************23
 
-// При прямом доступе получаем реальное значение
-String actualPassword = ConfigManager.resolve(ConfigKeys.DB_PASSWORD);
-// Результат: actualPassword123
+// Direct access returns real value
+String actualPassword = ConfigProvider.basicAuthPassword();
+// Result: secretpassword123
+
+// Logging non-secret values
+log.info("API URL: {}", ConfigProvider.baseUrlApi());
+log.info("Environment: {}", ConfigProvider.appEnv());
 ```
 
-## 📊 Мониторинг и метрики
+## 📊 Monitoring and Metrics
 
-### Метрики доступа
+### Access Metrics
 
 ```java
-Map<String, Long> accessMetrics = ConfigManager.getAccessMetrics();
-// Результат: { "base.url" -> 15, "timeout.seconds" -> 8, ... }
+// Access metrics are not available in current ConfigProvider version
+// Use ConfigProvider.dumpMasked() for configuration debugging
+String configDump = ConfigProvider.dumpMasked();
+System.out.println(configDump);
 ```
 
-### Метрики ошибок
+### Configuration Debugging
 
 ```java
-Map<String, Long> errorMetrics = ConfigManager.getErrorMetrics();
-// Результат: { "missing.key" -> 3, "invalid.value" -> 1, ... }
+// Get full configuration dump with secret masking
+String configDump = ConfigProvider.dumpMasked();
+System.out.println(configDump);
+
+// Reload configuration at runtime
+ConfigProvider.reload();
+
+// Get specific values
+URI apiUrl = ConfigProvider.baseUrlApi();
+String environment = ConfigProvider.appEnv();
+boolean isHeadless = ConfigProvider.headless();
 ```
 
-### Размер кэша
+## 🌍 Environment Support
 
-```java
-int cacheSize = ConfigCache.size();
-// Результат: количество закэшированных значений
-```
-
-## 🌍 Поддержка окружений
-
-### Переменные окружения
+### Environment Variables
 
 ```bash
-# Установка переменных окружения
-export BASE_URL=https://staging.example.com
-export ENV=stage
+# Set environment variables (new standardized names)
+export BASE_URL_UI=https://staging.example.com
+export BASE_URL_API=https://staging-api.example.com
+export APP_ENV=stage
 export LOG_LEVEL=DEBUG
+export DATABASE_URL=jdbc:postgresql://staging-db:5432/socksdb
 
-# Запуск приложения
+# Run application
 java -jar app.jar
 ```
 
 ### System Properties
 
 ```bash
-# Передача через командную строку
-java -Dbase.url=https://prod.example.com -Denv=prod -jar app.jar
+# Pass via command line (new property names)
+java -DbaseUrlUi=https://prod.example.com -DappEnv=prod -jar app.jar
 
-# Установка в коде
-System.setProperty("timeout.seconds", "60");
+# Set in code
+System.setProperty("connectTimeoutMs", "5000");
+System.setProperty("readTimeoutMs", "15000");
 ```
 
-### .env файл
+### .env File
 
 ```bash
-# .env файл в корне проекта
-BASE_URL=http://localhost:3000
-DB_URL=jdbc:postgresql://localhost:5432/dev_db
+# .env file in project root (new standardized names)
+BASE_URL_UI=http://localhost:3000
+BASE_URL_API=http://localhost:8080/api
+DATABASE_URL=jdbc:postgresql://localhost:5432/dev_db
 LOG_LEVEL=DEBUG
+BASIC_AUTH_USERNAME=dev_user
+BASIC_AUTH_PASSWORD=dev_password
 ```
 
-## 🚨 Обработка ошибок
+## 🚨 Error Handling
 
 ### ConfigurationException
 
 ```java
 try {
-    String value = ConfigCache.getString(ConfigKeys.REQUIRED_KEY);
-} catch (ConfigurationException e) {
+    String value = ConfigProvider.get(ConfigKey.REQUIRED_KEY);
+} catch (IllegalStateException e) {
     log.error("Configuration error: {}", e.getMessage());
-    // Обработка ошибки конфигурации
+    // Handle configuration error
 }
 ```
 
-### Типы ошибок
+### Error Types
 
-1. **Missing Required Configuration** - отсутствует обязательная конфигурация
-2. **Invalid Value** - неверное значение (нельзя распарсить)
-3. **Configuration Loading Failed** - ошибка загрузки файлов конфигурации
+1. **Missing Required Configuration** - required configuration is missing
+2. **Invalid Value** - invalid value (cannot be parsed)
+3. **Configuration Loading Failed** - configuration file loading error
 
-## 🔄 Динамическое обновление
+## 🔄 Dynamic Updates
 
-### Обновление конфигурации
+### Configuration Updates
 
 ```java
-// Обновить конфигурацию в runtime
-ConfigManager.refresh();
+// Update configuration at runtime
+ConfigProvider.reload();
 
-// Очистить кэш
-ConfigCache.clear();
-
-// Проверить здоровье после обновления
-boolean healthy = ConfigManager.isHealthy();
+// Get safe configuration dump for debugging
+String configDump = ConfigProvider.dumpMasked();
+System.out.println(configDump);
 ```
 
-## 📈 Производительность
+## 📈 Performance
 
-### Кэширование
+### Snapshot Architecture
 
-- **Автоматическое кэширование** при первом обращении
-- **Типизированное хранение** (без повторного парсинга)
-- **Thread-safe операции** с ConcurrentHashMap
+- **Immutable snapshot** - configuration is loaded once into an immutable snapshot
+- **EnumMap optimization** - uses EnumMap for better performance and lower memory consumption
+- **Thread-safe operations** - safe access from multiple threads
 
-### Оптимизации
+### Optimizations
 
-- **Lazy loading** конфигурации
-- **Efficient parsing** с кэшированием результатов
-- **Minimal memory footprint** для неиспользуемых значений
+- **Lazy initialization** - configuration is loaded on first access
+- **Efficient parsing** - each value is parsed only once
+- **Memory efficient** - EnumMap uses simple array instead of hash table
 
-## 🛠️ Лучшие практики
+## 🛠️ Best Practices
 
-### 1. Использование кэша
+### 1. Using Type-Safe Getters
 
 ```java
-// ✅ Хорошо - использует кэш
-String url = ConfigCache.getString(ConfigKeys.BASE_URL);
+// ✅ Good - uses type-safe methods
+URI apiUrl = ConfigProvider.baseUrlApi();
+int timeout = ConfigProvider.connectTimeoutMs();
+boolean headless = ConfigProvider.headless();
 
-// ❌ Плохо - каждый раз разрешает заново
-String url = ConfigManager.resolve(ConfigKeys.BASE_URL);
+// ✅ Alternative - universal getter
+URI apiUrl = ConfigProvider.get(ConfigKey.BASE_URL_API);
 ```
 
-### 2. Валидация при старте
+### 2. Startup Validation
 
 ```java
-// ✅ Хорошо - проверяем конфигурацию при старте
+// ✅ Good - configuration is automatically validated on load
 public static void main(String[] args) {
     try {
-        ConfigValidator.validateRequired();
-        // Продолжаем работу
-    } catch (ConfigurationException e) {
+        // Configuration is loaded and validated automatically
+        URI apiUrl = ConfigProvider.baseUrlApi();
+        System.out.println("API URL: " + apiUrl);
+    } catch (IllegalStateException e) {
         System.err.println("Configuration error: " + e.getMessage());
         System.exit(1);
     }
 }
 ```
 
-### 3. Обработка ошибок
+### 3. Error Handling
 
 ```java
-// ✅ Хорошо - обрабатываем ошибки конфигурации
+// ✅ Good - handle configuration errors
 try {
-    String value = ConfigCache.getString(ConfigKeys.KEY);
-} catch (ConfigurationException e) {
-    log.error("Failed to get configuration: {}", e.getMessage());
-    // Fallback или graceful degradation
+    int timeout = ConfigProvider.readTimeoutMs();
+    // Use timeout
+} catch (IllegalStateException e) {
+    log.error("Configuration validation failed: {}", e.getMessage());
+    // Fallback or graceful degradation
 }
 ```
 
-### 4. Логирование
+### 4. Safe Logging
 
 ```java
-// ✅ Хорошо - логируем безопасно
-log.info("Base URL: {}", ConfigManager.getForLogging(ConfigKeys.BASE_URL));
+// ✅ Good - use safe dump for logging
+log.info("Configuration loaded:\n{}", ConfigProvider.dumpMasked());
 
-// ❌ Плохо - может залогировать чувствительные данные
-log.info("Base URL: {}", ConfigManager.resolve(ConfigKeys.BASE_URL));
+// ✅ Good - direct access to non-secret values
+log.info("API URL: {}", ConfigProvider.baseUrlApi());
+log.info("Environment: {}", ConfigProvider.appEnv());
+
+// ❌ Avoid - direct logging of secrets
+// log.info("Password: {}", ConfigProvider.basicAuthPassword()); // Don't do this!
 ```
 
-## 🔧 Настройка для разных проектов
+## 🔧 Configuration for Different Projects
 
 ### Test Automation Framework
 
 ```properties
-# config-test.properties
-browser.headless=true
-test.parallel=true
-test.thread.count=4
-ui.screenshot.on.failure=true
-mock.external.services=true
+# application-test.properties
+headless=true
+parallelExecution=true
+threadCount=4
+screenshotOnFailure=true
+logLevel=INFO
 ```
 
 ### CI/CD Pipeline
 
 ```bash
-# Установка переменных для CI/CD
+# Set variables for CI/CD
 export ENV=ci
 export BASE_URL=$CI_BASE_URL
 export API_TOKEN=$CI_API_TOKEN
 
-# Запуск тестов
+# Run tests
 ./gradlew test
 ```
 
 ### Local Development
 
 ```properties
-# config-dev.properties
-base.url=http://localhost:3000
-log.level=DEBUG
-browser.headless=false
-ui.video.recording=true
+# application-local.properties
+baseUrlUi=http://localhost:3000
+baseUrlApi=http://localhost:8080/api
+logLevel=DEBUG
+headless=false
+screenshotOnFailure=true
 ```
 
-## 📚 Примеры использования в Test Framework
+## 📚 Test Framework Usage Examples
 
 ### 1. WebDriver Configuration
 
@@ -491,16 +561,17 @@ public class WebDriverConfig {
     public static WebDriver createDriver() {
         ChromeOptions options = new ChromeOptions();
         
-        if (ConfigCache.getBoolean(ConfigKeys.HEADLESS)) {
+        if (ConfigProvider.headless()) {
             options.addArguments("--headless");
         }
         
-        options.addArguments("--window-size=" + ConfigCache.getString(ConfigKeys.WINDOW_SIZE));
+        // Use reasonable default values for window size
+        options.addArguments("--window-size=1920,1080");
         
         WebDriver driver = new ChromeDriver(options);
         driver.manage().timeouts()
-            .implicitlyWait(ConfigCache.getInt(ConfigKeys.IMPLICIT_WAIT), TimeUnit.SECONDS)
-            .pageLoadTimeout(ConfigCache.getInt(ConfigKeys.PAGE_LOAD_TIMEOUT), TimeUnit.SECONDS);
+            .implicitlyWait(Duration.ofSeconds(10)) // Reasonable default value
+            .pageLoadTimeout(Duration.ofSeconds(30));
         
         return driver;
     }
@@ -515,12 +586,13 @@ public class BaseTestSuite {
     
     @BeforeAll
     void setUp() {
-        // Валидация конфигурации перед запуском тестов
-        ConfigValidator.validateRequired();
+        // Configuration is automatically validated on load
+        System.out.println("Test configuration:");
+        System.out.println(ConfigProvider.dumpMasked());
         
-        // Настройка параллельного выполнения
-        if (ConfigCache.getBoolean(ConfigKeys.PARALLEL_EXECUTION)) {
-            int threadCount = ConfigCache.getInt(ConfigKeys.THREAD_COUNT);
+        // Setup parallel execution
+        if (ConfigProvider.parallelExecution()) {
+            int threadCount = ConfigProvider.threadCount();
             System.setProperty("junit.jupiter.execution.parallel.enabled", "true");
             System.setProperty("junit.jupiter.execution.parallel.config.strategy", "fixed");
             System.setProperty("junit.jupiter.execution.parallel.config.fixed.parallelism", 
@@ -530,8 +602,8 @@ public class BaseTestSuite {
     
     @AfterAll
     void tearDown() {
-        // Очистка ресурсов
-        ConfigCache.clear();
+        // Clean up resources if needed
+        System.out.println("Tests completed for environment: " + ConfigProvider.appEnv());
     }
 }
 ```
@@ -540,24 +612,28 @@ public class BaseTestSuite {
 
 ```java
 @Tag("dev")
-@TestPropertySource(properties = {"env=dev"})
+@TestPropertySource(properties = {"app.env=dev"})
 public class DevEnvironmentTest extends BaseTestSuite {
     
     @Test
     void shouldWorkWithDevEnvironment() {
-        String baseUrl = ConfigCache.getString(ConfigKeys.BASE_URL);
-        assertTrue(baseUrl.contains("localhost") || baseUrl.contains("dev"));
+        URI baseUrl = ConfigProvider.baseUrlUi();
+        String url = baseUrl.toString();
+        assertTrue(url.contains("localhost") || url.contains("dev"));
+        assertEquals("dev", ConfigProvider.appEnv());
     }
 }
 
 @Tag("staging")
-@TestPropertySource(properties = {"env=stage"})
+@TestPropertySource(properties = {"app.env=stage"})
 public class StagingEnvironmentTest extends BaseTestSuite {
     
     @Test
     void shouldWorkWithStagingEnvironment() {
-        String baseUrl = ConfigCache.getString(ConfigKeys.BASE_URL);
-        assertTrue(baseUrl.contains("staging"));
+        URI baseUrl = ConfigProvider.baseUrlUi();
+        String url = baseUrl.toString();
+        assertTrue(url.contains("stage"));
+        assertEquals("stage", ConfigProvider.appEnv());
     }
 }
 ```
@@ -566,72 +642,90 @@ public class StagingEnvironmentTest extends BaseTestSuite {
 
 ```java
 public class ApiClient {
-    private final String baseUrl;
-    private final int timeout;
+    private final URI baseUrl;
+    private final int readTimeout;
+    private final int connectTimeout;
     private final String apiToken;
     
     public ApiClient() {
-        this.baseUrl = ConfigCache.getString(ConfigKeys.API_BASE_URL);
-        this.timeout = ConfigCache.getInt(ConfigKeys.API_TIMEOUT);
-        this.apiToken = ConfigCache.getString(ConfigKeys.API_TOKEN);
+        this.baseUrl = ConfigProvider.baseUrlApi();
+        this.readTimeout = ConfigProvider.readTimeoutMs();
+        this.connectTimeout = ConfigProvider.connectTimeoutMs();
+        this.apiToken = ConfigProvider.apiToken();
     }
     
     public Response makeRequest(String endpoint) {
-        // Использование конфигурации
-        return client.newCall(request)
-            .timeout(timeout, TimeUnit.SECONDS)
-            .execute();
+        // Using configuration
+        OkHttpClient client = new OkHttpClient.Builder()
+            .readTimeout(readTimeout, TimeUnit.MILLISECONDS)
+            .connectTimeout(connectTimeout, TimeUnit.MILLISECONDS)
+            .build();
+            
+        Request request = new Request.Builder()
+            .url(baseUrl.resolve(endpoint).toString())
+            .addHeader("Authorization", "Bearer " + apiToken)
+            .build();
+            
+        return client.newCall(request).execute();
     }
 }
 ```
 
-### Test Suite Configuration
+### TestNG Integration
 
 ```java
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class TestSuite {
+@Test
+public class SocksShopTestSuite {
     
-    @BeforeAll
-    void setUp() {
-        // Валидация конфигурации перед запуском тестов
-        ConfigValidator.validateRequired();
+    @BeforeClass
+    public void setUp() {
+        // Configuration is automatically validated on load
+        System.out.println("Starting tests with configuration:");
+        System.out.println("Environment: " + ConfigProvider.appEnv());
+        System.out.println("API URL: " + ConfigProvider.baseUrlApi());
+        System.out.println("UI URL: " + ConfigProvider.baseUrlUi());
+        System.out.println("Headless mode: " + ConfigProvider.headless());
         
-        // Настройка параллельного выполнения
-        if (ConfigCache.getBoolean(ConfigKeys.PARALLEL_EXECUTION)) {
-            int threadCount = ConfigCache.getInt(ConfigKeys.THREAD_COUNT);
-            System.setProperty("junit.jupiter.execution.parallel.enabled", "true");
-            System.setProperty("junit.jupiter.execution.parallel.config.strategy", "fixed");
-            System.setProperty("junit.jupiter.execution.parallel.config.fixed.parallelism", 
-                String.valueOf(threadCount));
+        // Setup parallel execution for TestNG
+        if (ConfigProvider.parallelExecution()) {
+            System.setProperty("testng.thread.count", String.valueOf(ConfigProvider.threadCount()));
         }
+    }
+    
+    @Test
+    public void testApiConnection() {
+        URI apiUrl = ConfigProvider.baseUrlApi();
+        // Test API connection
+        assertNotNull(apiUrl);
+        assertTrue(apiUrl.toString().startsWith("http"));
     }
 }
 ```
 
-## 🚀 Заключение
+## 🚀 Conclusion
 
-Этот конфигурационный модуль предоставляет:
+This configuration module provides:
 
-- **Профессиональный подход** к управлению конфигурацией
-- **Гибкость** для различных окружений
-- **Производительность** через кэширование
-- **Безопасность** при работе с чувствительными данными
-- **Надежность** через валидацию и обработку ошибок
-- **Мониторинг** для отслеживания использования
+- **Professional approach** to configuration management
+- **Flexibility** for different environments
+- **Performance** through caching
+- **Security** when working with sensitive data
+- **Reliability** through validation and error handling
+- **Monitoring** for usage tracking
 
-Модуль готов для использования в production средах и тестовых фреймворках, обеспечивая стабильную и эффективную работу с конфигурацией.
+The module is ready for use in production environments and test frameworks, providing stable and efficient configuration management.
 
-## 📋 Чек-лист для использования в Test Framework
+## 📋 Test Framework Usage Checklist
 
-- [ ] Настроены профили окружения (`config-{env}.properties`)
-- [ ] Создан `.env` файл для локальной разработки (добавлен в `.gitignore`)
-- [ ] Валидация конфигурации в `@BeforeAll` тестов
-- [ ] Использование `ConfigCache` для частого доступа к конфигурации
-- [ ] Обработка `ConfigurationException` в критических местах
-- [ ] Безопасное логирование через `ConfigManager.getForLogging()`
-- [ ] Настроены GitLab CI/CD переменные окружения
-- [ ] Протестированы все профили окружения
-- [ ] Настроен базовый класс `BaseTestSuite` для тестов
-- [ ] Созданы environment-specific тестовые классы
-- [ ] Настроено параллельное выполнение тестов
-- [ ] Интегрирован Allure для отчетности
+- [ ] Environment profiles configured (`application-{env}.properties` or `configuration-{env}.properties`)
+- [ ] `.env` file created for local development (added to `.gitignore`)
+- [ ] Configuration automatically validated on load
+- [ ] Use type-safe `ConfigProvider` methods for configuration access
+- [ ] Handle `IllegalStateException` for configuration errors
+- [ ] Safe logging through `ConfigProvider.dumpMasked()`
+- [ ] Environment variables configured for CI/CD (ENV_VAR_NAME format)
+- [ ] All environment profiles tested (local, dev, ci, qa, stage, prod)
+- [ ] Base test class configured using ConfigProvider
+- [ ] Environment-specific test classes created
+- [ ] Parallel execution configured through `ConfigProvider.parallelExecution()`
+- [ ] Allure integrated for reporting through `ConfigProvider.allureAttachHttp()`

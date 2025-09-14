@@ -3,33 +3,45 @@ plugins {
     id("io.qameta.allure") version "2.11.2"
 }
 
-group = "org.example"
-version = "1.0-SNAPSHOT"
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
+}
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    testImplementation(platform("org.junit:junit-bom:5.10.0"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    implementation("org.projectlombok:lombok:1.18.38")
-    annotationProcessor ("org.projectlombok:lombok:1.18.38")
-    implementation("ch.qos.logback:logback-classic:1.5.11")
-    implementation("io.github.cdimascio:dotenv-java:3.0.0")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.1")
-
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.3")
+    // Test framework
+    testImplementation("org.testng:testng:7.10.2")
     testImplementation("org.assertj:assertj-core:3.26.3")
 
+    // Logging - SLF4J + Logback only (removed Log4j dependencies)
+    implementation("org.slf4j:slf4j-api:2.0.17")
+    implementation("ch.qos.logback:logback-classic:1.5.11")
+
+    // JSON processing
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.1")
+
+    // Allure reporting
+    testImplementation("io.qameta.allure:allure-testng:2.29.0")
+
+    // Lombok (consolidated versions)
+    compileOnly("org.projectlombok:lombok:1.18.40")
+    annotationProcessor("org.projectlombok:lombok:1.18.40")
+    testCompileOnly("org.projectlombok:lombok:1.18.40")
+    testAnnotationProcessor("org.projectlombok:lombok:1.18.40")
 }
 
 tasks.test {
-    useJUnitPlatform()
-    systemProperty("env", project.findProperty("env") ?: "dev")
-    systemProperty("API_TOKEN", System.getenv("API_TOKEN"))
-    systemProperty("DB_PASSWORD", System.getenv("DB_PASSWORD"))
+    useTestNG()
+// Show test logging in CI without too much noise
+    testLogging {
+        events("passed", "skipped", "failed")
+        showStandardStreams = false
+    }
 }
 
 allure {
@@ -39,4 +51,11 @@ allure {
         aspectjVersion.set("1.9.9.1")
     }
     version.set("2.21.0")
+}
+
+configurations.all {
+    resolutionStrategy {
+        // Prefer latest within minor for security patches if needed in CI
+        cacheChangingModulesFor(0, "seconds")
+    }
 }
