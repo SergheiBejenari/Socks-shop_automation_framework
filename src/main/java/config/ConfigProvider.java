@@ -1,13 +1,16 @@
 package config;
 
+import config.sources.DotEnvFileConfigSource;
+import config.sources.PropertiesFileConfigSource;
 import java.net.URI;
 import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Stream;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Thread-safe configuration provider with immutable snapshot and reload capability.
@@ -323,8 +326,13 @@ public class ConfigProvider {
             .flatMap(key -> Stream.of(key.name(), key.getSysPropName()))
             .collect(Collectors.toSet());
         
-        // Check each configuration source for unknown keys
-        for (ConfigSource source : config.getSources()) {
+        // Check each configuration source for unknown keys (only file-based sources)
+        List<ConfigSource> fileSources = config.getSources().stream()
+            .filter(source -> source instanceof PropertiesFileConfigSource
+                || source instanceof DotEnvFileConfigSource)
+            .toList();
+
+        for (ConfigSource source : fileSources) {
             Set<String> sourceKeys = source.getAllKeys();
             if (sourceKeys.isEmpty()) {
                 continue; // Skip sources that don't implement getAllKeys()
