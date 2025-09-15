@@ -8,6 +8,12 @@ import static org.assertj.core.api.Assertions.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * Tests for FileWatcher synchronization with custom CompositeConfig file paths.
@@ -44,9 +50,8 @@ public class CustomConfigFileWatcherTest {
         if (Files.exists(customProfileFile)) Files.delete(customProfileFile);
         if (Files.exists(customEnvFile)) Files.delete(customEnvFile);
         if (Files.exists(tempDir)) Files.delete(tempDir);
-        
-        // Stop file watcher
-        FileWatcher.getInstance().stop();
+
+        FileWatcherTest.resetFileWatcherForTests();
     }
     
     @Test
@@ -125,30 +130,65 @@ public class CustomConfigFileWatcherTest {
         }).doesNotThrowAnyException();
     }
     
-    @Test(timeOut = 3000)
+    @Test(timeOut = 5000)
     public void testFileWatcherWithCustomPaths() throws Exception {
-        // Integration test: verify FileWatcher can monitor custom files
         FileWatcher watcher = FileWatcher.getInstance();
-        
-        // Watch the custom files
-        watcher.watchFile(customBaseFile);
-        watcher.watchFile(customProfileFile);
-        watcher.start();
-        
-        // Give the watcher time to initialize
-        Thread.sleep(100);
-        
-        // Modify one of the custom files
-        Files.write(customBaseFile, "base.key=modified_value\nshared.key=from_base_modified\n".getBytes());
-        
-        // Wait for file system event processing
-        Thread.sleep(200);
-        
-        // Test passes if no exceptions are thrown and files exist
-        assertThat(Files.exists(customBaseFile)).isTrue();
-        assertThat(Files.exists(customProfileFile)).isTrue();
-        
-        watcher.stop();
+        String propertyName = ConfigKey.WRITE_TIMEOUT_MS.getSysPropName();
+        String originalValue = System.getProperty(propertyName);
+
+        ExecutorService monitorExecutor = null;
+        AtomicBoolean monitorRunning = new AtomicBoolean(false);
+
+        try {
+            System.setProperty(propertyName, "3100");
+            ConfigProvider.reload();
+            assertThat(ConfigProvider.writeTimeoutMs()).isEqualTo(3100);
+
+            CountDownLatch valueUpdatedLatch = new CountDownLatch(1);
+            monitorRunning.set(true);
+            monitorExecutor = Executors.newSingleThreadExecutor();
+            monitorExecutor.submit(() -> {
+                try {
+                    while (monitorRunning.get()) {
+                        if (ConfigProvider.writeTimeoutMs() == 3200) {
+                            valueUpdatedLatch.countDown();
+                            break;
+                        }
+                        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(50));
+                    }
+                } finally {
+                    monitorRunning.set(false);
+                }
+            });
+
+            watcher.watchFile(customBaseFile);
+            watcher.watchFile(customProfileFile);
+            watcher.start();
+
+            System.setProperty(propertyName, "3200");
+            assertThat(ConfigProvider.writeTimeoutMs()).isEqualTo(3100);
+
+            Files.writeString(customBaseFile, "base.key=modified_value\nshared.key=from_base_modified\n");
+
+            assertThat(valueUpdatedLatch.await(3, TimeUnit.SECONDS))
+                .as("Configuration value should update for custom paths")
+                .isTrue();
+
+            assertThat(ConfigProvider.writeTimeoutMs()).isEqualTo(3200);
+            assertThat(Files.exists(customBaseFile)).isTrue();
+            assertThat(Files.exists(customProfileFile)).isTrue();
+        } finally {
+            monitorRunning.set(false);
+            if (monitorExecutor != null) {
+                monitorExecutor.shutdownNow();
+            }
+            if (originalValue != null) {
+                System.setProperty(propertyName, originalValue);
+            } else {
+                System.clearProperty(propertyName);
+            }
+            ConfigProvider.reload();
+        }
     }
     
     @Test

@@ -6,11 +6,19 @@ import org.testng.annotations.AfterMethod;
 import static org.assertj.core.api.Assertions.*;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.WatchService;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * Tests for FileWatcher functionality including automatic configuration reloading.
@@ -39,9 +47,8 @@ public class FileWatcherTest {
         if (Files.exists(tempDir)) {
             Files.delete(tempDir);
         }
-        
-        // Stop file watcher
-        FileWatcher.getInstance().stop();
+
+        resetFileWatcherForTests();
     }
     
     @Test
@@ -114,29 +121,61 @@ public class FileWatcherTest {
     
     @Test(timeOut = 5000)
     public void testFileChangeDetection() throws Exception {
-        // Test that file changes are detected (integration test)
         FileWatcher watcher = FileWatcher.getInstance();
-        
-        // Set up a latch to wait for reload
-        CountDownLatch reloadLatch = new CountDownLatch(1);
-        
-        // Watch the test file
-        watcher.watchFile(testConfigFile);
-        watcher.start();
-        
-        // Give the watcher time to set up
-        Thread.sleep(100);
-        
-        // Modify the file
-        Files.write(testConfigFile, "test.key=modified_value\n".getBytes());
-        
-        // Wait a bit for the file system event to be processed
-        Thread.sleep(500);
-        
-        // The test passes if no exceptions are thrown during file watching
-        assertThat(Files.exists(testConfigFile)).isTrue();
-        
-        watcher.stop();
+        String propertyName = ConfigKey.READ_TIMEOUT_MS.getSysPropName();
+        String originalValue = System.getProperty(propertyName);
+
+        ExecutorService monitorExecutor = null;
+        AtomicBoolean monitorRunning = new AtomicBoolean(false);
+
+        try {
+            System.setProperty(propertyName, "1111");
+            ConfigProvider.reload();
+            assertThat(ConfigProvider.readTimeoutMs()).isEqualTo(1111);
+
+            CountDownLatch valueUpdatedLatch = new CountDownLatch(1);
+            monitorRunning.set(true);
+            monitorExecutor = Executors.newSingleThreadExecutor();
+            monitorExecutor.submit(() -> {
+                try {
+                    while (monitorRunning.get()) {
+                        if (ConfigProvider.readTimeoutMs() == 2222) {
+                            valueUpdatedLatch.countDown();
+                            break;
+                        }
+                        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(50));
+                    }
+                } finally {
+                    monitorRunning.set(false);
+                }
+            });
+
+            watcher.watchFile(testConfigFile);
+            watcher.start();
+
+            System.setProperty(propertyName, "2222");
+            assertThat(ConfigProvider.readTimeoutMs()).isEqualTo(1111);
+
+            Files.writeString(testConfigFile, "test.key=modified_value\n");
+
+            assertThat(valueUpdatedLatch.await(3, TimeUnit.SECONDS))
+                .as("Configuration value should update after reload")
+                .isTrue();
+
+            assertThat(ConfigProvider.readTimeoutMs()).isEqualTo(2222);
+        } finally {
+            // Ensure background monitor thread stops promptly
+            monitorRunning.set(false);
+            if (monitorExecutor != null) {
+                monitorExecutor.shutdownNow();
+            }
+            if (originalValue != null) {
+                System.setProperty(propertyName, originalValue);
+            } else {
+                System.clearProperty(propertyName);
+            }
+            ConfigProvider.reload();
+        }
     }
     
     @Test
@@ -146,5 +185,49 @@ public class FileWatcherTest {
             ConfigProvider.reload();
             ConfigProvider.reload("Test reload reason");
         }).doesNotThrowAnyException();
+    }
+
+    static void resetFileWatcherForTests() {
+        try {
+            FileWatcher watcher = FileWatcher.getInstance();
+
+            Field runningField = FileWatcher.class.getDeclaredField("running");
+            runningField.setAccessible(true);
+            ((AtomicBoolean) runningField.get(watcher)).set(false);
+
+            Field watchedFilesField = FileWatcher.class.getDeclaredField("watchedFiles");
+            watchedFilesField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Set<Path> watchedFiles = (Set<Path>) watchedFilesField.get(watcher);
+            watchedFiles.clear();
+
+            Field watchServiceField = FileWatcher.class.getDeclaredField("watchService");
+            watchServiceField.setAccessible(true);
+            WatchService oldWatchService = (WatchService) watchServiceField.get(watcher);
+            if (oldWatchService != null) {
+                try {
+                    oldWatchService.close();
+                } catch (IOException ignored) {
+                    // Ignore errors while closing old watch service during reset
+                }
+            }
+            WatchService newWatchService = FileSystems.getDefault().newWatchService();
+            watchServiceField.set(watcher, newWatchService);
+
+            Field executorField = FileWatcher.class.getDeclaredField("executor");
+            executorField.setAccessible(true);
+            ExecutorService oldExecutor = (ExecutorService) executorField.get(watcher);
+            if (oldExecutor != null && !oldExecutor.isShutdown()) {
+                oldExecutor.shutdownNow();
+            }
+            ExecutorService newExecutor = Executors.newSingleThreadExecutor(r -> {
+                Thread thread = new Thread(r, "ConfigFileWatcher");
+                thread.setDaemon(true);
+                return thread;
+            });
+            executorField.set(watcher, newExecutor);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to reset FileWatcher singleton for tests", e);
+        }
     }
 }
