@@ -256,15 +256,19 @@ public class ConfigProvider {
             FileWatcher watcher = FileWatcher.getInstance();
             String profile = resolveProfile();
             
-            // Watch common configuration files
-            watcher.watchResource("application.properties");
-            watcher.watchResource("application-" + profile + ".properties");
-            watcher.watchResource(".env");
+            // Create CompositeConfig to get actual file paths being used
+            CompositeConfig config = new CompositeConfig(profile);
+            
+            // Watch the actual configuration files being used
+            watcher.watchResource(config.getBaseFilename());
+            watcher.watchResource(config.getProfileFilename());
+            watcher.watchResource(config.getDotEnvPath());
             
             // Start the watcher service
             watcher.start();
             
-            ConfigLogging.debug("File watcher configured for profile: {}", profile);
+            ConfigLogging.debug("File watcher configured for profile: {} - watching: {}, {}, {}", 
+                profile, config.getBaseFilename(), config.getProfileFilename(), config.getDotEnvPath());
         } catch (Exception e) {
             ConfigLogging.warn("Failed to start file watcher: {} - automatic reload disabled", e.getMessage());
             ConfigLogging.debug("File watcher startup error details", e);
@@ -310,7 +314,7 @@ public class ConfigProvider {
         // Set system property for logback configuration
         String logLevel = (String) values.get(ConfigKey.LOG_LEVEL);
         if (logLevel != null) {
-            System.setProperty("logLevel", logLevel);
+            System.setProperty("ROOT_LOG_LEVEL", logLevel);
         }
         
         return Map.copyOf(values); // Immutable snapshot

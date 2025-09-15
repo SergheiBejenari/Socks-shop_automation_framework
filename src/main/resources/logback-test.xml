@@ -29,7 +29,7 @@
     </logger>
 
     <!-- Root logger -->
-    <root level="${logLevel:-INFO}">
+    <root level="${ROOT_LOG_LEVEL:-INFO}">
         <appender-ref ref="CONSOLE" />
     </root>
     

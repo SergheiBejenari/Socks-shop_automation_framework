@@ -72,17 +72,22 @@ public class FileWatcher {
             return;
         }
         
-        try {
-            Path directory = filePath.getParent();
-            if (directory != null) {
-                directory.register(watchService, 
-                    StandardWatchEventKinds.ENTRY_MODIFY,
-                    StandardWatchEventKinds.ENTRY_CREATE);
-                watchedFiles.add(filePath);
-                ConfigLogging.debug("Now watching configuration file: {}", filePath);
+        // Only register if file is not already being watched
+        if (watchedFiles.add(filePath)) {
+            try {
+                Path directory = filePath.getParent();
+                if (directory != null) {
+                    directory.register(watchService, 
+                        StandardWatchEventKinds.ENTRY_MODIFY,
+                        StandardWatchEventKinds.ENTRY_CREATE);
+                    ConfigLogging.debug("Now watching configuration file: {}", filePath);
+                }
+            } catch (IOException | RuntimeException e) {
+                ConfigLogging.error("Failed to watch file {}: {}", filePath, e.getMessage());
+                watchedFiles.remove(filePath); // Remove from set if registration failed
             }
-        } catch (IOException e) {
-            ConfigLogging.error("Failed to watch file {}: {}", filePath, e.getMessage());
+        } else {
+            ConfigLogging.debug("File already being watched: {}", filePath);
         }
     }
     

@@ -11,6 +11,9 @@ import java.util.Optional;
 public class CompositeConfig implements ConfigSource {
     
     private final List<ConfigSource> sources;
+    private final String profileFilename;
+    private final String baseFilename;
+    private final String dotEnvPath;
     
     // Default file naming patterns
     private static final String DEFAULT_PROFILE_PATTERN = "application-%s.properties";
@@ -44,14 +47,16 @@ public class CompositeConfig implements ConfigSource {
      * @param dotEnvPath the path to the .env file
      */
     public CompositeConfig(String profile, String profilePattern, String baseFilename, String dotEnvPath) {
-        String profileFilename = String.format(profilePattern, profile);
+        this.profileFilename = String.format(profilePattern, profile);
+        this.baseFilename = baseFilename;
+        this.dotEnvPath = dotEnvPath;
         
         this.sources = List.of(
             new EnvConfigSource(),
             new SystemPropsConfigSource(),
-            new PropertiesFileConfigSource(profileFilename, "profile:" + profile),
-            new PropertiesFileConfigSource(baseFilename, "base"),
-            new DotEnvFileConfigSource(dotEnvPath)
+            new PropertiesFileConfigSource(this.profileFilename, "profile:" + profile),
+            new PropertiesFileConfigSource(this.baseFilename, "base"),
+            new DotEnvFileConfigSource(this.dotEnvPath)
         );
     }
     
@@ -97,5 +102,26 @@ public class CompositeConfig implements ConfigSource {
      */
     public List<ConfigSource> getSources() {
         return sources;
+    }
+    
+    /**
+     * Returns the profile-specific properties filename being used.
+     */
+    public String getProfileFilename() {
+        return profileFilename;
+    }
+    
+    /**
+     * Returns the base properties filename being used.
+     */
+    public String getBaseFilename() {
+        return baseFilename;
+    }
+    
+    /**
+     * Returns the .env file path being used.
+     */
+    public String getDotEnvPath() {
+        return dotEnvPath;
     }
 }

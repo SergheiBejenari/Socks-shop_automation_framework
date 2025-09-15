@@ -17,6 +17,7 @@ dependencies {
     // Test framework
     testImplementation("org.testng:testng:7.10.2")
     testImplementation("org.assertj:assertj-core:3.26.3")
+    testImplementation("com.github.stefanbirkner:system-lambda:1.2.1")
 
     // Logging - SLF4J + Logback only (removed Log4j dependencies)
     implementation("org.slf4j:slf4j-api:2.0.17")
