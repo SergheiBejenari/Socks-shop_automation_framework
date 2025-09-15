@@ -21,6 +21,7 @@ public class ConfigProvider {
     private static volatile Map<ConfigKey, Object> snapshot;
     private static final Object LOCK = new Object();
     private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
+    private static final AtomicBoolean LOGGED_ONCE = new AtomicBoolean(false);
     
     static {
         initialize();
@@ -274,8 +275,6 @@ public class ConfigProvider {
             ConfigLogging.debug("File watcher startup error details", e);
         }
     }
-    
-    private static final AtomicBoolean LOGGED_ONCE = new AtomicBoolean(false);
     
     private static void logConfigurationOnce() {
         if (LOGGED_ONCE.compareAndSet(false, true)) {
