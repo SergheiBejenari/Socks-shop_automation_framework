@@ -1,22 +1,27 @@
 package config;
 
-import org.testng.annotations.Test;
-import org.testng.annotations.BeforeMethod;
-import org.testng.annotations.AfterMethod;
 import static org.assertj.core.api.Assertions.*;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import config.sources.DotEnvFileConfigSource;
+import config.sources.EnvConfigSource;
+import config.sources.PropertiesFileConfigSource;
+import config.sources.SystemPropsConfigSource;
+import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Set;
-import java.util.List;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.net.URI;
-import config.sources.DotEnvFileConfigSource;
-import config.sources.PropertiesFileConfigSource;
-import config.sources.EnvConfigSource;
-import config.sources.SystemPropsConfigSource;
+import java.util.Set;
+import org.slf4j.LoggerFactory;
+import org.testng.annotations.AfterMethod;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Test;
 
 /**
  * Comprehensive tests for ConfigProvider covering precedence, profile resolution,
@@ -614,10 +619,10 @@ public class ConfigProviderTest {
     public void testConfigProviderUnknownKeyWarnings() {
         // Test that ConfigProvider.buildSnapshot() detects unknown keys during initialization
         // This test verifies that the detectUnknownKeys() method is called and logs warnings
-        
+
         // Create a custom CompositeConfig with our test file
         CompositeConfig testConfig = new CompositeConfig("local", "test-unknown-keys.properties", "application.properties");
-        
+
         // Get all sources to verify our test file is included
         List<ConfigSource> sources = testConfig.getSources();
         
@@ -630,12 +635,42 @@ public class ConfigProviderTest {
             .anyMatch(source -> !source.getAllKeys().isEmpty());
         assertThat(hasKeysInSources).isTrue();
     }
-    
+
+    @Test
+    public void testNoWarningsForStandardEnvAndSystemVariables() {
+        assertThat(System.getenv()).as("Environment should contain standard variables for the test").isNotEmpty();
+
+        String customSysProp = "test.configprovider.unknown.sysprop";
+        System.setProperty(customSysProp, "temporary-value");
+
+        Logger logger = (Logger) LoggerFactory.getLogger("config");
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            ConfigProvider.reload("Verify filtering of env/sys unknown keys");
+
+            boolean hasUnknownWarnings = appender.list.stream()
+                .filter(event -> event.getLevel() == Level.WARN)
+                .map(ILoggingEvent::getFormattedMessage)
+                .anyMatch(message -> message.contains("Unknown configuration key"));
+
+            assertThat(hasUnknownWarnings)
+                .as("No unknown key warnings should be emitted for environment or system properties")
+                .isFalse();
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+            System.clearProperty(customSysProp);
+        }
+    }
+
     @Test
     public void testEnvironmentVariablePriorityOverSystemProperties() {
         // Test real environment variable priority by checking actual ENV vars vs system properties
         // We'll test with a common environment variable that likely exists
-        
+
         String testKey = "PATH"; // PATH is available on all systems
         String envValue = System.getenv(testKey);
         
