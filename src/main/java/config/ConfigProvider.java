@@ -450,7 +450,8 @@ public class ConfigProvider {
         
         // Validate profile
         try {
-            String validatedProfile = Validators.validateAppEnv(profile.trim());
+            profile = profile.trim().toLowerCase();
+            String validatedProfile = Validators.validateAppEnv(profile);
             ConfigLogging.logValidation("APP_ENV", "Profile validation passed: " + validatedProfile);
             return validatedProfile;
         } catch (IllegalStateException e) {
