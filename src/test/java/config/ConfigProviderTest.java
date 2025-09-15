@@ -6,6 +6,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.github.stefanbirkner.systemlambda.SystemLambda;
 import config.sources.DotEnvFileConfigSource;
 import config.sources.EnvConfigSource;
 import config.sources.PropertiesFileConfigSource;
@@ -125,16 +126,11 @@ public class ConfigProviderTest {
 
     @Test
     public void testProfileResolutionFromEnvironmentVariableIsNormalized() throws Exception {
-        // Test uses real environment variables instead of mocking
-        // This test will be skipped if APP_ENV is not set to "DEV" in the environment
-        String currentAppEnv = System.getenv("APP_ENV");
-        if ("DEV".equals(currentAppEnv)) {
-            ConfigProvider.reload();
-            assertThat(ConfigProvider.appEnv()).isEqualTo("dev");
-        } else {
-            // Skip test if environment variable is not set as expected
-            System.out.println("Skipping test - APP_ENV not set to 'DEV' in environment");
-        }
+        SystemLambda.withEnvironmentVariable("APP_ENV", "DEV")
+            .execute(() -> {
+                ConfigProvider.reload();
+                assertThat(ConfigProvider.appEnv()).isEqualTo("dev");
+            });
     }
 
     @Test
@@ -662,98 +658,88 @@ public class ConfigProviderTest {
     }
 
     @Test
-    public void testNoWarningsForStandardEnvAndSystemVariables() {
-        assertThat(System.getenv()).as("Environment should contain standard variables for the test").isNotEmpty();
+    public void testNoWarningsForStandardEnvAndSystemVariables() throws Exception {
+        SystemLambda.withEnvironmentVariable("STANDARD_ENV_VAR", "standard-value")
+            .execute(() -> {
+                assertThat(System.getenv("STANDARD_ENV_VAR"))
+                    .as("Environment variable should be explicitly provided for the test")
+                    .isEqualTo("standard-value");
 
-        String customSysProp = "test.configprovider.unknown.sysprop";
-        System.setProperty(customSysProp, "temporary-value");
+                String customSysProp = "test.configprovider.unknown.sysprop";
+                System.setProperty(customSysProp, "temporary-value");
 
-        Logger logger = (Logger) LoggerFactory.getLogger("config");
-        ListAppender<ILoggingEvent> appender = new ListAppender<>();
-        appender.start();
-        logger.addAppender(appender);
+                Logger logger = (Logger) LoggerFactory.getLogger("config");
+                ListAppender<ILoggingEvent> appender = new ListAppender<>();
+                appender.start();
+                logger.addAppender(appender);
 
-        try {
-            ConfigProvider.reload("Verify filtering of env/sys unknown keys");
+                try {
+                    ConfigProvider.reload("Verify filtering of env/sys unknown keys");
 
-            boolean hasUnknownWarnings = appender.list.stream()
-                .filter(event -> event.getLevel() == Level.WARN)
-                .map(ILoggingEvent::getFormattedMessage)
-                .anyMatch(message -> message.contains("Unknown configuration key"));
+                    boolean hasUnknownWarnings = appender.list.stream()
+                        .filter(event -> event.getLevel() == Level.WARN)
+                        .map(ILoggingEvent::getFormattedMessage)
+                        .anyMatch(message -> message.contains("Unknown configuration key"));
 
-            assertThat(hasUnknownWarnings)
-                .as("No unknown key warnings should be emitted for environment or system properties")
-                .isFalse();
-        } finally {
-            logger.detachAppender(appender);
-            appender.stop();
-            System.clearProperty(customSysProp);
-        }
+                    assertThat(hasUnknownWarnings)
+                        .as("No unknown key warnings should be emitted for environment or system properties")
+                        .isFalse();
+                } finally {
+                    logger.detachAppender(appender);
+                    appender.stop();
+                    System.clearProperty(customSysProp);
+                }
+            });
     }
 
     @Test
-    public void testEnvironmentVariablePriorityOverSystemProperties() {
-        // Test real environment variable priority by checking actual ENV vars vs system properties
-        // We'll test with a common environment variable that likely exists
+    public void testEnvironmentVariablePriorityOverSystemProperties() throws Exception {
+        final String testKey = "TEST_ENV_PRIORITY_KEY";
 
-        String testKey = "PATH"; // PATH is available on all systems
-        String envValue = System.getenv(testKey);
-        
-        if (envValue != null) {
-            // Set a different system property value
-            System.setProperty(testKey, "test-system-property-value");
-            
-            // Create sources in priority order (env should win over sysprops)
-            EnvConfigSource envSource = new EnvConfigSource();
-            SystemPropsConfigSource sysPropsSource = new SystemPropsConfigSource();
-            
-            // Environment variable should take precedence
-            Optional<String> envResult = envSource.get(testKey);
-            Optional<String> sysResult = sysPropsSource.get(testKey);
-            
-            assertThat(envResult).isPresent();
-            assertThat(sysResult).isPresent();
-            assertThat(envResult.get()).isEqualTo(envValue);
-            assertThat(sysResult.get()).isEqualTo("test-system-property-value");
-            
-            // Clean up
-            System.clearProperty(testKey);
-        }
-        
-        // Test with a custom key that we can control
-        String customKey = "TEST_CONFIG_PRIORITY_" + System.currentTimeMillis();
-        System.setProperty(customKey, "system-property-value");
-        
-        EnvConfigSource envSource = new EnvConfigSource();
-        SystemPropsConfigSource sysPropsSource = new SystemPropsConfigSource();
-        
-        // ENV should be empty, system property should have value
-        assertThat(envSource.get(customKey)).isEmpty();
-        assertThat(sysPropsSource.get(customKey)).hasValue("system-property-value");
-        
-        // Clean up
-        System.clearProperty(customKey);
+        SystemLambda.withEnvironmentVariable(testKey, "env-priority-value")
+            .execute(() -> {
+                EnvConfigSource envSource = new EnvConfigSource();
+                SystemPropsConfigSource sysPropsSource = new SystemPropsConfigSource();
+
+                System.setProperty(testKey, "test-system-property-value");
+                try {
+                    Optional<String> envResult = envSource.get(testKey);
+                    Optional<String> sysResult = sysPropsSource.get(testKey);
+
+                    assertThat(envResult).hasValue("env-priority-value");
+                    assertThat(sysResult).hasValue("test-system-property-value");
+                } finally {
+                    System.clearProperty(testKey);
+                }
+
+                String customKey = "TEST_CONFIG_PRIORITY_" + System.currentTimeMillis();
+                System.setProperty(customKey, "system-property-value");
+                try {
+                    assertThat(envSource.get(customKey)).isEmpty();
+                    assertThat(sysPropsSource.get(customKey)).hasValue("system-property-value");
+                } finally {
+                    System.clearProperty(customKey);
+                }
+            });
     }
-    
-    @Test 
-    public void testRealEnvironmentVariablePriorityInCompositeConfig() {
-        // Test that CompositeConfig respects ENV > SysProps priority with real values
-        String testKey = "JAVA_HOME"; // Common environment variable
-        String javaHomeEnv = System.getenv(testKey);
-        
-        if (javaHomeEnv != null) {
-            // Set different system property
-            System.setProperty(testKey, "fake-java-home");
-            
-            CompositeConfig config = new CompositeConfig("local");
-            Optional<String> configValue = config.get(testKey);
-            
-            // Environment variable should win over system property
-            assertThat(configValue).hasValue(javaHomeEnv);
-            
-            // Clean up
-            System.clearProperty(testKey);
-        }
+
+    @Test
+    public void testRealEnvironmentVariablePriorityInCompositeConfig() throws Exception {
+        final String testKey = "TEST_COMPOSITE_PRIORITY";
+
+        SystemLambda.withEnvironmentVariable(testKey, "env-composite-value")
+            .execute(() -> {
+                System.setProperty(testKey, "fake-java-home");
+                try {
+                    CompositeConfig config = new CompositeConfig("local");
+                    Optional<String> configValue = config.get(testKey);
+
+                    // Environment variable should win over system property
+                    assertThat(configValue).hasValue("env-composite-value");
+                } finally {
+                    System.clearProperty(testKey);
+                }
+            });
     }
     
     @Test

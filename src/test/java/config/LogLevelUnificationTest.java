@@ -7,6 +7,8 @@ import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
+import com.github.stefanbirkner.systemlambda.SystemLambda;
+
 import static org.assertj.core.api.Assertions.*;
 
 /**
@@ -87,21 +89,21 @@ public class LogLevelUnificationTest {
     }
     
     @Test
-    public void testRootLogLevelFromEnvironmentVariable() {
+    public void testRootLogLevelFromEnvironmentVariable() throws Exception {
         // Test that environment variable LOG_LEVEL is properly handled
-        // Note: This test checks that the system property is set correctly
         // when the configuration comes from environment variables
-        
-        // Clear system property and rely on default or environment
+
+        // Clear system property and rely on explicit environment setup
         System.clearProperty("log.level");
-        ConfigProvider.reload();
-        
-        // If LOG_LEVEL environment variable exists, ROOT_LOG_LEVEL should be set
-        String envLogLevel = System.getenv("LOG_LEVEL");
-        if (envLogLevel != null) {
-            String rootLogLevel = System.getProperty("ROOT_LOG_LEVEL");
-            assertThat(rootLogLevel).isEqualTo(envLogLevel);
-        }
+
+        SystemLambda.withEnvironmentVariable("LOG_LEVEL", "TRACE")
+            .execute(() -> {
+                ConfigProvider.reload();
+
+                String rootLogLevel = System.getProperty("ROOT_LOG_LEVEL");
+                assertThat(rootLogLevel).isEqualTo("TRACE");
+                assertThat(ConfigProvider.logLevel()).isEqualTo("TRACE");
+            });
     }
     
     @Test
