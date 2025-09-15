@@ -198,6 +198,7 @@ public class ConfigProvider {
             snapshot = buildSnapshot();
             INITIALIZED.set(true);
             LOGGED_ONCE.set(false); // Reset flag to allow re-logging after reload
+            startFileWatcher();
             logConfigurationOnce();
         }
     }
@@ -222,12 +223,14 @@ public class ConfigProvider {
         
         return sb.toString();
     }
-    
+
     private static void initialize() {
         synchronized (LOCK) {
             if (snapshot == null) {
                 snapshot = buildSnapshot();
                 INITIALIZED.set(true);
+                startFileWatcher();
+                logConfigurationOnce();
             }
         }
     }
@@ -238,19 +241,7 @@ public class ConfigProvider {
      */
     private static void ensureInitialized() {
         if (!INITIALIZED.get()) {
-            synchronized (LOCK) {
-                if (!INITIALIZED.get()) {
-                    snapshot = buildSnapshot();
-                    INITIALIZED.set(true);
-                    
-                    // Start file watcher for automatic reloads
-                    startFileWatcher();
-                    
-                    // Log configuration summary
-                    String profile = resolveProfile();
-                    ConfigLogging.logConfigDump(profile, dumpMasked());
-                }
-            }
+            initialize();
         }
     }
     
