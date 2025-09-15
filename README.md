@@ -6,53 +6,39 @@ A professional configuration management module designed with SDET best practices
 
 - **Multi-layered configuration resolution** with source priority
 - **Environment profiles** (local, dev, ci, qa, stage, prod)
-- **Caching** for improved performance
+- **Type-safe accessors** generated for every configuration key
 - **Configuration validation** with detailed reporting
 - **Secure handling** of sensitive data
-- **Metrics and monitoring** for configuration access
-- **Thread-safe** operations for multi-threaded environments
+- **Automatic reloads** via the built-in `FileWatcher`
+- **Thread-safe** operations with immutable snapshots
 
 ## 🚀 Quick Start
 
-### 1. Build and Testing
+### Build & Verify
 
 ```bash
-# Build project
 ./gradlew clean build
-
-# Run all tests
-./gradlew test
-
-# Run tests with profile
-./gradlew test -Denv=test
-
-# Run specific test
-./gradlew test --tests ConfigProviderTest
-
-# Run with configuration override
-./gradlew test -DbaseUrlApi=https://custom.example.com -DreadTimeoutMs=60000
 ```
 
-### 2. Running Tests
+### Test Commands
 
 ```bash
-# Run all tests
+# Run the full test suite
 ./gradlew test
 
-# Run specific test
-./gradlew test --tests ConfigProviderTest
+# Focus on a single test class
+./gradlew test --tests "config.ConfigProviderTest"
 
-# Run with detailed output
-./gradlew test --info
+# Switch profiles via system property
+./gradlew test -Dapp.env=qa
+
+# ...or via environment variable
+APP_ENV=qa ./gradlew test
 ```
 
-### 3. Project Build
+### Create a JAR Artifact
 
 ```bash
-# Clean and build
-./gradlew clean build
-
-# Create JAR file
 ./gradlew jar
 ```
 
@@ -246,10 +232,9 @@ ConfigLogging.logDefaultValue("APP_ENV", "local");
 The project includes a ready-to-use GitLab CI/CD pipeline with the following capabilities:
 
 - **Multi-stage pipeline**: validate → test → report
-- **Parallel test execution** for faster execution
-- **Environment-specific testing** (dev, staging)
-- **Allure reporting** with beautiful reports
-- **Coverage reporting** with JaCoCo
+- **Dedicated jobs** for full-suite and configuration-only checks
+- **Environment profile selection** via the `TEST_ENV` variable
+- **Allure reporting** with generated reports
 - **Artifact management** for test results
 
 ### Available Pipeline Versions
@@ -293,7 +278,8 @@ SLACK_WEBHOOK_URL=            # Webhook for notifications
 
 ### Test Structure
 
-- **ConfigProviderTest** - Main configuration module tests (32 tests)
+- **ConfigProviderTest** - Validates multi-source resolution and type-safe access
+- **FileWatcher** tests - Cover automatic reload behavior and duplicate watcher protection
 - **TestNG** - Uses TestNG instead of JUnit 5 for testing
 
 ### Test Examples
@@ -347,33 +333,6 @@ log.info("API URL: {}", ConfigProvider.baseUrlApi());
 log.info("Environment: {}", ConfigProvider.appEnv());
 ```
 
-## 📊 Monitoring and Metrics
-
-### Access Metrics
-
-```java
-// Access metrics are not available in current ConfigProvider version
-// Use ConfigProvider.dumpMasked() for configuration debugging
-String configDump = ConfigProvider.dumpMasked();
-System.out.println(configDump);
-```
-
-### Configuration Debugging
-
-```java
-// Get full configuration dump with secret masking
-String configDump = ConfigProvider.dumpMasked();
-System.out.println(configDump);
-
-// Reload configuration at runtime
-ConfigProvider.reload();
-
-// Get specific values
-URI apiUrl = ConfigProvider.baseUrlApi();
-String environment = ConfigProvider.appEnv();
-boolean isHeadless = ConfigProvider.headless();
-```
-
 ## 🌍 Environment Support
 
 ### Environment Variables
@@ -394,7 +353,7 @@ java -jar app.jar
 
 ```bash
 # Pass via command line (new property names)
-java -DbaseUrlUi=https://prod.example.com -DappEnv=prod -jar app.jar
+java -DbaseUrlUi=https://prod.example.com -Dapp.env=prod -jar app.jar
 
 # Set in code
 System.setProperty("connectTimeoutMs", "5000");
@@ -409,7 +368,7 @@ BASE_URL_UI=http://localhost:3000
 BASE_URL_API=http://localhost:8080/api
 DATABASE_URL=jdbc:postgresql://localhost:5432/dev_db
 LOG_LEVEL=DEBUG
-BASIC_AUTH_USERNAME=dev_user
+BASIC_AUTH_USER=dev_user
 BASIC_AUTH_PASSWORD=dev_password
 ```
 
@@ -419,7 +378,7 @@ BASIC_AUTH_PASSWORD=dev_password
 
 ```java
 try {
-    String value = ConfigProvider.get(ConfigKey.REQUIRED_KEY);
+    URI apiUrl = ConfigProvider.get(ConfigKey.BASE_URL_API);
 } catch (IllegalStateException e) {
     log.error("Configuration error: {}", e.getMessage());
     // Handle configuration error
@@ -708,10 +667,10 @@ This configuration module provides:
 
 - **Professional approach** to configuration management
 - **Flexibility** for different environments
-- **Performance** through caching
+- **Type-safe access** with validation and default management
 - **Security** when working with sensitive data
 - **Reliability** through validation and error handling
-- **Monitoring** for usage tracking
+- **Automatic reloads** via file watching
 
 The module is ready for use in production environments and test frameworks, providing stable and efficient configuration management.
 
