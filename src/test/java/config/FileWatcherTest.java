@@ -256,6 +256,12 @@ public class FileWatcherTest {
             Set<Path> watchedFiles = (Set<Path>) watchedFilesField.get(watcher);
             watchedFiles.clear();
 
+            Field watchedDirectoriesField = FileWatcher.class.getDeclaredField("watchedDirectories");
+            watchedDirectoriesField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Set<Path> watchedDirectories = (Set<Path>) watchedDirectoriesField.get(watcher);
+            watchedDirectories.clear();
+
             Field watchServiceField = FileWatcher.class.getDeclaredField("watchService");
             watchServiceField.setAccessible(true);
             WatchService oldWatchService = (WatchService) watchServiceField.get(watcher);
