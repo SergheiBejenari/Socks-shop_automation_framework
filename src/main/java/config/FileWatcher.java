@@ -84,35 +84,47 @@ public class FileWatcher {
      * @param filePath Path to the file to watch
      */
     public void watchFile(Path filePath) {
-        if (!Files.exists(filePath)) {
-            ConfigLogging.debug("Cannot watch non-existent file: {}", filePath);
+        Path normalizedFilePath = filePath.toAbsolutePath().normalize();
+        Path directory = normalizedFilePath.getParent();
+
+        if (directory == null) {
+            ConfigLogging.debug("Cannot watch file without parent directory: {}", normalizedFilePath);
             return;
         }
-        
+
         // Only register if file is not already being watched
-        if (watchedFiles.add(filePath)) {
-            Path directory = filePath.getParent();
+        if (watchedFiles.add(normalizedFilePath)) {
+            if (Files.notExists(directory)) {
+                ConfigLogging.debug("Directory for configuration file {} does not exist: {}", normalizedFilePath, directory);
+                watchedFiles.remove(normalizedFilePath);
+                return;
+            }
+
             boolean directoryRegisteredHere = false;
 
             try {
-                if (directory != null) {
-                    if (watchedDirectories.add(directory)) {
-                        directory.register(watchService,
-                            StandardWatchEventKinds.ENTRY_MODIFY,
-                            StandardWatchEventKinds.ENTRY_CREATE);
-                        directoryRegisteredHere = true;
-                    }
-                    ConfigLogging.debug("Now watching configuration file: {}", filePath);
+                if (watchedDirectories.add(directory)) {
+                    directory.register(watchService,
+                        StandardWatchEventKinds.ENTRY_MODIFY,
+                        StandardWatchEventKinds.ENTRY_CREATE,
+                        StandardWatchEventKinds.ENTRY_DELETE);
+                    directoryRegisteredHere = true;
+                }
+
+                if (Files.exists(normalizedFilePath)) {
+                    ConfigLogging.debug("Now watching configuration file: {}", normalizedFilePath);
+                } else {
+                    ConfigLogging.debug("Watching for configuration file to appear: {}", normalizedFilePath);
                 }
             } catch (IOException | RuntimeException e) {
-                ConfigLogging.error("Failed to watch file {}: {}", filePath, e.getMessage());
-                watchedFiles.remove(filePath); // Remove from set if registration failed
-                if (directory != null && directoryRegisteredHere) {
+                ConfigLogging.error("Failed to watch file {}: {}", normalizedFilePath, e.getMessage());
+                watchedFiles.remove(normalizedFilePath); // Remove from set if registration failed
+                if (directoryRegisteredHere) {
                     watchedDirectories.remove(directory);
                 }
             }
         } else {
-            ConfigLogging.debug("File already being watched: {}", filePath);
+            ConfigLogging.debug("File already being watched: {}", normalizedFilePath);
         }
     }
     
@@ -151,9 +163,9 @@ public class FileWatcher {
                     @SuppressWarnings("unchecked")
                     WatchEvent<Path> pathEvent = (WatchEvent<Path>) event;
                     Path fileName = pathEvent.context();
-                    Path directory = (Path) key.watchable();
-                    Path fullPath = directory.resolve(fileName);
-                    
+                    Path directory = ((Path) key.watchable()).toAbsolutePath().normalize();
+                    Path fullPath = directory.resolve(fileName).toAbsolutePath().normalize();
+
                     // Check if this is one of our watched files
                     if (watchedFiles.contains(fullPath)) {
                         ConfigLogging.info("Configuration file changed: {} - scheduling reload", fullPath);
