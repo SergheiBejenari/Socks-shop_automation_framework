@@ -206,6 +206,22 @@ public class ConfigProvider {
             logConfigurationOnce();
         }
     }
+
+    /**
+     * Stops background services and clears initialization state so the provider can be safely
+     * discarded. Useful for test frameworks or runners that require explicit teardown.
+     */
+    public static void shutdown() {
+        synchronized (LOCK) {
+            try {
+                FileWatcher.getInstance().stop();
+            } finally {
+                snapshot = null;
+                INITIALIZED.set(false);
+                LOGGED_ONCE.set(false);
+            }
+        }
+    }
     
     /**
      * Returns a masked dump of all configuration values for debugging.

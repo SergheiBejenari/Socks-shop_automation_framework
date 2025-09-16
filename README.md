@@ -163,10 +163,19 @@ String password = ConfigProvider.basicAuthPassword();
 // Reload configuration at runtime
 ConfigProvider.reload();
 
+// Explicit teardown for runners that reuse the JVM between suites
+ConfigProvider.shutdown();
+
 // Get full configuration dump with secret masking
 String configDump = ConfigProvider.dumpMasked();
 System.out.println(configDump);
 ```
+
+### Frameworks Requiring Explicit Teardown
+
+Some runners keep the JVM alive across multiple suites (for example, when embedding this module
+inside other automation frameworks). Call `ConfigProvider.shutdown()` during teardown to stop the
+background file watcher and clear initialization flags before the process exits.
 
 ### ConfigKey - Configuration Keys Enumeration
 
