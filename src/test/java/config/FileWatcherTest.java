@@ -222,6 +222,52 @@ public class FileWatcherTest {
         }
     }
 
+    @Test(timeOut = 5000)
+    public void testReloadOnFileCreateAndDelete() throws Exception {
+        FileWatcher watcher = FileWatcher.getInstance();
+
+        Files.deleteIfExists(testConfigFile);
+
+        Logger logbackLogger = (Logger) org.slf4j.LoggerFactory.getLogger("config");
+        ReloadCountingAppender appender = new ReloadCountingAppender();
+        appender.start();
+        logbackLogger.addAppender(appender);
+
+        try {
+            watcher.watchFile(testConfigFile);
+            watcher.start();
+
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(100));
+
+            int initialCount = appender.getCount();
+
+            Files.writeString(testConfigFile, "test.key=create_event\n");
+
+            boolean creationReload = waitForReload(appender, initialCount, 2, TimeUnit.SECONDS);
+
+            assertThat(creationReload)
+                .as("Configuration reload should occur after watched file is created")
+                .isTrue();
+
+            int afterCreationCount = appender.getCount();
+
+            boolean deleted = Files.deleteIfExists(testConfigFile);
+            assertThat(deleted)
+                .as("Watched configuration file should be deleted for reload test")
+                .isTrue();
+
+            boolean deletionReload = waitForReload(appender, afterCreationCount, 2, TimeUnit.SECONDS);
+
+            assertThat(deletionReload)
+                .as("Configuration reload should occur after watched file is deleted")
+                .isTrue();
+        } finally {
+            watcher.stop();
+            logbackLogger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
     @Test
     public void testConfigProviderReloadMethod() {
         // Test that ConfigProvider has both reload methods
