@@ -23,9 +23,6 @@ dependencies {
     implementation("org.slf4j:slf4j-api:2.0.17")
     implementation("ch.qos.logback:logback-classic:1.5.11")
 
-    // JSON processing
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.1")
-
     // Allure reporting
     testImplementation("io.qameta.allure:allure-testng:2.29.0")
 
