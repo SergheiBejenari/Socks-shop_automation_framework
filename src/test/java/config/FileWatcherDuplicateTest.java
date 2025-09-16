@@ -35,7 +35,7 @@ public class FileWatcherDuplicateTest {
     public void tearDown() throws IOException {
         // Stop file watcher first
         FileWatcher.getInstance().stop();
-        
+
         // Clean up temporary files
         if (Files.exists(testFile)) {
             Files.delete(testFile);
@@ -54,6 +54,8 @@ public class FileWatcherDuplicateTest {
             }
             Files.delete(tempDir);
         }
+
+        FileWatcherTest.resetFileWatcherForTests();
     }
     
     @Test
