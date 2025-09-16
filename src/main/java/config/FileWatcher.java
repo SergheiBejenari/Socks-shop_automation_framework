@@ -23,6 +23,7 @@ public class FileWatcher {
     private final ScheduledExecutorService scheduler;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final Set<Path> watchedFiles = ConcurrentHashMap.newKeySet();
+    private final Set<Path> watchedDirectories = ConcurrentHashMap.newKeySet();
     private final Object reloadLock = new Object();
     private ScheduledFuture<?> scheduledReload;
     private String pendingReloadReason;
@@ -90,17 +91,25 @@ public class FileWatcher {
         
         // Only register if file is not already being watched
         if (watchedFiles.add(filePath)) {
+            Path directory = filePath.getParent();
+            boolean directoryRegisteredHere = false;
+
             try {
-                Path directory = filePath.getParent();
                 if (directory != null) {
-                    directory.register(watchService, 
-                        StandardWatchEventKinds.ENTRY_MODIFY,
-                        StandardWatchEventKinds.ENTRY_CREATE);
+                    if (watchedDirectories.add(directory)) {
+                        directory.register(watchService,
+                            StandardWatchEventKinds.ENTRY_MODIFY,
+                            StandardWatchEventKinds.ENTRY_CREATE);
+                        directoryRegisteredHere = true;
+                    }
                     ConfigLogging.debug("Now watching configuration file: {}", filePath);
                 }
             } catch (IOException | RuntimeException e) {
                 ConfigLogging.error("Failed to watch file {}: {}", filePath, e.getMessage());
                 watchedFiles.remove(filePath); // Remove from set if registration failed
+                if (directory != null && directoryRegisteredHere) {
+                    watchedDirectories.remove(directory);
+                }
             }
         } else {
             ConfigLogging.debug("File already being watched: {}", filePath);

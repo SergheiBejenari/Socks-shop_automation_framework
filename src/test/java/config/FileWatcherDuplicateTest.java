@@ -1,5 +1,8 @@
 package config;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.AppenderBase;
 import org.testng.annotations.Test;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.AfterMethod;
@@ -10,6 +13,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.slf4j.LoggerFactory;
 
 /**
  * Tests for FileWatcher duplicate registration prevention.
@@ -119,12 +125,56 @@ public class FileWatcherDuplicateTest {
             fail("Test setup failed", e);
         }
     }
-    
+
+    @Test(timeOut = 5000)
+    public void testSingleModificationEventForFilesInSameDirectory() throws Exception {
+        Path file1 = tempDir.resolve("config-multi-1.properties");
+        Path file2 = tempDir.resolve("config-multi-2.properties");
+
+        Files.writeString(file1, "file1.key=value1\n");
+        Files.writeString(file2, "file2.key=value2\n");
+
+        FileWatcher watcher = FileWatcher.getInstance();
+
+        watcher.watchFile(file1);
+        watcher.watchFile(file2);
+
+        Logger logbackLogger = (Logger) LoggerFactory.getLogger("config");
+        FileChangeCountingAppender appender = new FileChangeCountingAppender(file1);
+        appender.start();
+        logbackLogger.addAppender(appender);
+
+        try {
+            watcher.start();
+
+            // Give the watcher thread time to start processing events
+            Thread.sleep(100);
+
+            Files.writeString(file1, "file1.key=updated_value\n");
+
+            boolean eventReceived = appender.awaitEvent(2, TimeUnit.SECONDS);
+            assertThat(eventReceived)
+                .as("File change event should be received for modified file")
+                .isTrue();
+
+            // Wait briefly to ensure no duplicate events are emitted
+            Thread.sleep(200);
+
+            assertThat(appender.getCount())
+                .as("Modification event should be emitted only once when watching multiple files in the same directory")
+                .isEqualTo(1);
+        } finally {
+            watcher.stop();
+            logbackLogger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
     @Test
     public void testWatchNonExistentFileTwice() {
         // Test that watching a non-existent file multiple times is handled gracefully
         Path nonExistentFile = tempDir.resolve("non-existent.properties");
-        
+
         FileWatcher watcher = FileWatcher.getInstance();
         
         // First call should handle gracefully
@@ -190,7 +240,7 @@ public class FileWatcherDuplicateTest {
     public void testConcurrentWatchFileCalls() throws InterruptedException {
         // Test concurrent calls to watchFile() for the same path
         FileWatcher watcher = FileWatcher.getInstance();
-        
+
         int threadCount = 5;
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch doneLatch = new CountDownLatch(threadCount);
@@ -215,7 +265,36 @@ public class FileWatcherDuplicateTest {
         // Wait for all threads to complete
         boolean completed = doneLatch.await(3, TimeUnit.SECONDS);
         assertThat(completed).isTrue();
-        
+
         // Test passes if no exceptions were thrown during concurrent access
+    }
+
+    private static class FileChangeCountingAppender extends AppenderBase<ILoggingEvent> {
+        private final String targetFile;
+        private final CountDownLatch firstEventLatch = new CountDownLatch(1);
+        private final AtomicInteger eventCount = new AtomicInteger();
+
+        FileChangeCountingAppender(Path targetFile) {
+            this.targetFile = targetFile.toString();
+        }
+
+        @Override
+        protected void append(ILoggingEvent event) {
+            String message = event.getFormattedMessage();
+            if (message != null
+                && message.startsWith("Configuration file changed")
+                && message.contains(targetFile)) {
+                eventCount.incrementAndGet();
+                firstEventLatch.countDown();
+            }
+        }
+
+        boolean awaitEvent(long timeout, TimeUnit unit) throws InterruptedException {
+            return firstEventLatch.await(timeout, unit);
+        }
+
+        int getCount() {
+            return eventCount.get();
+        }
     }
 }
