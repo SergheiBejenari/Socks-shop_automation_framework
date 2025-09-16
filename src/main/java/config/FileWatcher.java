@@ -3,6 +3,10 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,14 +20,24 @@ public class FileWatcher {
     private static final FileWatcher INSTANCE = new FileWatcher();
     private final WatchService watchService;
     private final ExecutorService executor;
+    private final ScheduledExecutorService scheduler;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final Set<Path> watchedFiles = ConcurrentHashMap.newKeySet();
-    
+    private final Object reloadLock = new Object();
+    private ScheduledFuture<?> scheduledReload;
+    private String pendingReloadReason;
+    private static final long RELOAD_DELAY_MS = 100L;
+
     private FileWatcher() {
         try {
             this.watchService = FileSystems.getDefault().newWatchService();
             this.executor = Executors.newSingleThreadExecutor(r -> {
                 Thread t = new Thread(r, "ConfigFileWatcher");
+                t.setDaemon(true);
+                return t;
+            });
+            this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "ConfigReloadScheduler");
                 t.setDaemon(true);
                 return t;
             });
@@ -55,6 +69,8 @@ public class FileWatcher {
             try {
                 watchService.close();
                 executor.shutdown();
+                cancelScheduledReload();
+                scheduler.shutdownNow();
                 ConfigLogging.info("Configuration file watcher stopped");
             } catch (IOException e) {
                 ConfigLogging.error("Error stopping file watcher: {}", e.getMessage());
@@ -131,16 +147,11 @@ public class FileWatcher {
                     
                     // Check if this is one of our watched files
                     if (watchedFiles.contains(fullPath)) {
-                        ConfigLogging.info("Configuration file changed: {} - triggering reload", fullPath);
-                        
-                        // Add a small delay to avoid multiple rapid reloads
-                        Thread.sleep(100);
-                        
-                        // Trigger configuration reload
-                        ConfigProvider.reload("File change detected: " + fullPath);
+                        ConfigLogging.info("Configuration file changed: {} - scheduling reload", fullPath);
+                        scheduleReload(fullPath);
                     }
                 }
-                
+
                 boolean valid = key.reset();
                 if (!valid) {
                     ConfigLogging.warn("Watch key no longer valid, stopping file watcher");
@@ -158,5 +169,45 @@ public class FileWatcher {
         }
         
         ConfigLogging.debug("File watcher loop ended");
+    }
+
+    private void scheduleReload(Path fullPath) {
+        synchronized (reloadLock) {
+            pendingReloadReason = "File change detected: " + fullPath;
+
+            if (scheduledReload != null && !scheduledReload.isDone()) {
+                scheduledReload.cancel(false);
+            }
+
+            try {
+                scheduledReload = scheduler.schedule(() -> {
+                    String reason;
+                    synchronized (reloadLock) {
+                        reason = pendingReloadReason;
+                        pendingReloadReason = null;
+                        scheduledReload = null;
+                    }
+
+                    try {
+                        ConfigProvider.reload(reason != null ? reason : "File change detected");
+                    } catch (Exception e) {
+                        ConfigLogging.error("Failed to reload configuration after file change: {}", e.getMessage());
+                        ConfigLogging.debug("Configuration reload error details", e);
+                    }
+                }, RELOAD_DELAY_MS, TimeUnit.MILLISECONDS);
+            } catch (RejectedExecutionException e) {
+                ConfigLogging.debug("Reload scheduler rejected task for {}: {}", fullPath, e.getMessage());
+            }
+        }
+    }
+
+    private void cancelScheduledReload() {
+        synchronized (reloadLock) {
+            if (scheduledReload != null) {
+                scheduledReload.cancel(false);
+                scheduledReload = null;
+            }
+            pendingReloadReason = null;
+        }
     }
 }

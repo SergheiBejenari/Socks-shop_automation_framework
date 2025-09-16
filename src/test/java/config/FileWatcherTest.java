@@ -1,5 +1,8 @@
 package config;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.AppenderBase;
 import org.testng.annotations.Test;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.AfterMethod;
@@ -16,8 +19,11 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 
 /**
@@ -177,7 +183,45 @@ public class FileWatcherTest {
             ConfigProvider.reload();
         }
     }
-    
+
+    @Test(timeOut = 5000)
+    public void testRapidFileChangesTriggerSingleReload() throws Exception {
+        FileWatcher watcher = FileWatcher.getInstance();
+
+        watcher.watchFile(testConfigFile);
+
+        Logger logbackLogger = (Logger) org.slf4j.LoggerFactory.getLogger("config");
+        ReloadCountingAppender appender = new ReloadCountingAppender();
+        appender.start();
+        logbackLogger.addAppender(appender);
+
+        try {
+            watcher.start();
+
+            int initialCount = appender.getCount();
+
+            Files.writeString(testConfigFile, "test.key=value1\n");
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(20));
+            Files.writeString(testConfigFile, "test.key=value2\n");
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(20));
+            Files.writeString(testConfigFile, "test.key=value3\n");
+
+            boolean reloaded = waitForReload(appender, initialCount, 2, TimeUnit.SECONDS);
+
+            assertThat(reloaded)
+                .as("Configuration reload should occur after rapid file changes")
+                .isTrue();
+
+            assertThat(appender.getCount() - initialCount)
+                .as("Reload should only be triggered once for rapid successive changes")
+                .isEqualTo(1);
+        } finally {
+            watcher.stop();
+            logbackLogger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
     @Test
     public void testConfigProviderReloadMethod() {
         // Test that ConfigProvider has both reload methods
@@ -185,6 +229,17 @@ public class FileWatcherTest {
             ConfigProvider.reload();
             ConfigProvider.reload("Test reload reason");
         }).doesNotThrowAnyException();
+    }
+
+    private boolean waitForReload(ReloadCountingAppender appender, int initialCount, long timeout, TimeUnit unit) {
+        long deadline = System.nanoTime() + unit.toNanos(timeout);
+        while (System.nanoTime() < deadline) {
+            if (appender.getCount() > initialCount) {
+                return true;
+            }
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(20));
+        }
+        return false;
     }
 
     static void resetFileWatcherForTests() {
@@ -226,8 +281,49 @@ public class FileWatcherTest {
                 return thread;
             });
             executorField.set(watcher, newExecutor);
+
+            Field schedulerField = FileWatcher.class.getDeclaredField("scheduler");
+            schedulerField.setAccessible(true);
+            ScheduledExecutorService oldScheduler = (ScheduledExecutorService) schedulerField.get(watcher);
+            if (oldScheduler != null && !oldScheduler.isShutdown()) {
+                oldScheduler.shutdownNow();
+            }
+            ScheduledExecutorService newScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread thread = new Thread(r, "ConfigReloadScheduler");
+                thread.setDaemon(true);
+                return thread;
+            });
+            schedulerField.set(watcher, newScheduler);
+
+            Field scheduledReloadField = FileWatcher.class.getDeclaredField("scheduledReload");
+            scheduledReloadField.setAccessible(true);
+            Object scheduledReload = scheduledReloadField.get(watcher);
+            if (scheduledReload instanceof ScheduledFuture<?> future) {
+                future.cancel(true);
+            }
+            scheduledReloadField.set(watcher, null);
+
+            Field pendingReasonField = FileWatcher.class.getDeclaredField("pendingReloadReason");
+            pendingReasonField.setAccessible(true);
+            pendingReasonField.set(watcher, null);
         } catch (Exception e) {
             throw new RuntimeException("Failed to reset FileWatcher singleton for tests", e);
+        }
+    }
+
+    private static class ReloadCountingAppender extends AppenderBase<ILoggingEvent> {
+        private final AtomicInteger reloadCount = new AtomicInteger();
+
+        @Override
+        protected void append(ILoggingEvent event) {
+            String message = event.getFormattedMessage();
+            if (message != null && message.startsWith("Configuration reload triggered")) {
+                reloadCount.incrementAndGet();
+            }
+        }
+
+        int getCount() {
+            return reloadCount.get();
         }
     }
 }
