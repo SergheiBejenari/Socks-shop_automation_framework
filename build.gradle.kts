@@ -3,12 +3,6 @@ plugins {
     id("io.qameta.allure") version "2.11.2"
 }
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
-}
-
 repositories {
     mavenCentral()
 }
