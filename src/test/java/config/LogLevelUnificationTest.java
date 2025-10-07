@@ -30,7 +30,7 @@ public class LogLevelUnificationTest {
         // Clear system properties for clean test state
         System.clearProperty("ROOT_LOG_LEVEL");
         System.clearProperty("logLevel");
-        System.clearProperty("log.level");
+        System.clearProperty("logLevel");
     }
     
     @AfterMethod
@@ -48,7 +48,7 @@ public class LogLevelUnificationTest {
             System.clearProperty("logLevel");
         }
         
-        System.clearProperty("log.level");
+        System.clearProperty("logLevel");
         
         // Reload to restore original state
         ConfigProvider.reload();
@@ -59,7 +59,7 @@ public class LogLevelUnificationTest {
         // Test that ConfigProvider sets ROOT_LOG_LEVEL system property
         
         // Set log level via system property
-        System.setProperty("log.level", "DEBUG");
+        System.setProperty("logLevel", "DEBUG");
         ConfigProvider.reload();
         
         // Verify that ROOT_LOG_LEVEL system property is set
@@ -76,7 +76,7 @@ public class LogLevelUnificationTest {
         String[] levels = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR"};
         
         for (String level : levels) {
-            System.setProperty("log.level", level);
+            System.setProperty("logLevel", level);
             ConfigProvider.reload();
             
             // Verify ROOT_LOG_LEVEL system property is set correctly
@@ -94,7 +94,7 @@ public class LogLevelUnificationTest {
         // when the configuration comes from environment variables
 
         // Clear system property and rely on explicit environment setup
-        System.clearProperty("log.level");
+        System.clearProperty("logLevel");
 
         SystemLambda.withEnvironmentVariable("LOG_LEVEL", "TRACE")
             .execute(() -> {
@@ -111,7 +111,7 @@ public class LogLevelUnificationTest {
         // Test that the actual logback configuration responds to ROOT_LOG_LEVEL changes
         
         // Set a specific log level
-        System.setProperty("log.level", "WARN");
+        System.setProperty("logLevel", "WARN");
         ConfigProvider.reload();
         
         // Verify ROOT_LOG_LEVEL system property is set
@@ -133,14 +133,14 @@ public class LogLevelUnificationTest {
         // Test that system property takes precedence over defaults
         
         // Set explicit system property
-        System.setProperty("log.level", "ERROR");
+        System.setProperty("logLevel", "ERROR");
         ConfigProvider.reload();
         
         assertThat(System.getProperty("ROOT_LOG_LEVEL")).isEqualTo("ERROR");
         assertThat(ConfigProvider.logLevel()).isEqualTo("ERROR");
         
         // Change to different level
-        System.setProperty("log.level", "TRACE");
+        System.setProperty("logLevel", "TRACE");
         ConfigProvider.reload();
         
         assertThat(System.getProperty("ROOT_LOG_LEVEL")).isEqualTo("TRACE");
@@ -152,7 +152,7 @@ public class LogLevelUnificationTest {
         // Test that null log level is handled gracefully
         
         // Clear all log level properties
-        System.clearProperty("log.level");
+        System.clearProperty("logLevel");
         System.clearProperty("ROOT_LOG_LEVEL");
         ConfigProvider.reload();
         
@@ -169,7 +169,7 @@ public class LogLevelUnificationTest {
     public void testLogLevelCaseInsensitive() {
         // Test that log levels are handled case-insensitively
         
-        System.setProperty("log.level", "debug");
+        System.setProperty("logLevel", "debug");
         ConfigProvider.reload();
         
         // Should be normalized to uppercase

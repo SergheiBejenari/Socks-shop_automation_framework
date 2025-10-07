@@ -80,7 +80,7 @@ connectTimeoutMs=10000
 logLevel=INFO
 headless=true
 browserType=CHROME
-appEnv=local
+app.env=local
 basicAuthUser=admin
 basicAuthPassword=admin123
 ```

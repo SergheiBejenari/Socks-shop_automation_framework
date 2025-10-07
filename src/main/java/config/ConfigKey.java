@@ -150,11 +150,11 @@ public enum ConfigKey {
     ),
     
     APP_ENV(
-        "APP_ENV", 
-        "app.env", 
+        "APP_ENV",
+        "app.env",
         String.class,
         () -> "local",
-        value -> value,
+        ValueParsers::toAppEnv,
         value -> Validators.validateAppEnv((String) value),
         false
     ),

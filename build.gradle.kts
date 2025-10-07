@@ -35,11 +35,17 @@ dependencies {
 
 tasks.test {
     useTestNG()
-// Show test logging in CI without too much noise
+    // Show test logging in CI without too much noise
     testLogging {
         events("passed", "skipped", "failed")
         showStandardStreams = false
     }
+
+    // Allow SystemLambda to modify environment variables on JDK 21+
+    jvmArgs(
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED"
+    )
 }
 
 allure {

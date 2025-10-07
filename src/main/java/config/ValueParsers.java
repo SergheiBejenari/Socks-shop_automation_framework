@@ -73,7 +73,18 @@ public class ValueParsers {
         if (value == null || value.trim().isEmpty()) {
             throw new IllegalArgumentException("Log level cannot be null or empty");
         }
-        
+
         return value.trim().toUpperCase();
+    }
+
+    /**
+     * Normalizes application environment names to lowercase.
+     */
+    public static String toAppEnv(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException("App environment cannot be null or empty");
+        }
+
+        return value.trim().toLowerCase();
     }
 }
