@@ -8,7 +8,7 @@ import org.testng.annotations.Test;
 
 import java.util.concurrent.TimeUnit;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class ConfigInitializationTest {
 
@@ -27,12 +27,12 @@ public class ConfigInitializationTest {
                 ConfigProvider.baseUrlUi();
 
                 assertThat(waitForLog(appender, "Configuration file watcher started"))
-                    .as("File watcher should log start message")
-                    .isTrue();
+                        .as("File watcher should log start message")
+                        .isTrue();
 
                 assertThat(waitForLog(appender, "Configuration dump"))
-                    .as("Configuration dump should be logged once")
-                    .isTrue();
+                        .as("Configuration dump should be logged once")
+                        .isTrue();
             } finally {
                 logger.detachAppender(appender);
                 appender.stop();
@@ -50,8 +50,8 @@ public class ConfigInitializationTest {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
         while (System.nanoTime() < deadline) {
             boolean found = appender.list.stream()
-                .map(ILoggingEvent::getFormattedMessage)
-                .anyMatch(msg -> msg.contains(expectedFragment));
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .anyMatch(msg -> msg.contains(expectedFragment));
             if (found) {
                 return true;
             }

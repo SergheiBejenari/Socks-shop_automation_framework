@@ -3,47 +3,40 @@ package config;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.AppenderBase;
-import org.testng.annotations.Test;
-import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.AfterMethod;
-import static org.assertj.core.api.Assertions.*;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Test;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.WatchService;
+import java.nio.file.*;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * Tests for FileWatcher functionality including automatic configuration reloading.
  */
 public class FileWatcherTest {
-    
+
     private Path tempDir;
     private Path testConfigFile;
-    
+
     @BeforeMethod
     public void setUp() throws IOException {
         // Create temporary directory for test files
         tempDir = Files.createTempDirectory("config-test");
         testConfigFile = tempDir.resolve("test-config.properties");
-        
+
         // Create initial test configuration file
         Files.write(testConfigFile, "test.key=initial_value\n".getBytes());
     }
-    
+
     @AfterMethod
     public void tearDown() throws IOException {
         // Clean up temporary files
@@ -56,43 +49,43 @@ public class FileWatcherTest {
 
         resetFileWatcherForTests();
     }
-    
+
     @Test
     public void testFileWatcherSingleton() {
         // Test that FileWatcher is a singleton
         FileWatcher watcher1 = FileWatcher.getInstance();
         FileWatcher watcher2 = FileWatcher.getInstance();
-        
+
         assertThat(watcher1).isSameAs(watcher2);
     }
-    
+
     @Test
     public void testWatchNonExistentFile() {
         // Test watching a non-existent file (should handle gracefully)
         FileWatcher watcher = FileWatcher.getInstance();
         Path nonExistentFile = Paths.get("/non/existent/file.properties");
-        
+
         // Should not throw exception
         assertThatCode(() -> watcher.watchFile(nonExistentFile))
-            .doesNotThrowAnyException();
+                .doesNotThrowAnyException();
     }
-    
+
     @Test
     public void testWatchExistingFile() {
         // Test watching an existing file
         FileWatcher watcher = FileWatcher.getInstance();
-        
+
         // Should not throw exception and file should exist
         assertThat(Files.exists(testConfigFile)).isTrue();
         assertThatCode(() -> watcher.watchFile(testConfigFile))
-            .doesNotThrowAnyException();
+                .doesNotThrowAnyException();
     }
-    
+
     @Test
     public void testStartStopWatcher() {
         // Test starting and stopping the watcher
         FileWatcher watcher = FileWatcher.getInstance();
-        
+
         // Should not throw exception
         assertThatCode(() -> {
             watcher.start();
@@ -100,12 +93,12 @@ public class FileWatcherTest {
             watcher.stop();
         }).doesNotThrowAnyException();
     }
-    
+
     @Test
     public void testMultipleStartCalls() {
         // Test that multiple start calls are idempotent
         FileWatcher watcher = FileWatcher.getInstance();
-        
+
         assertThatCode(() -> {
             watcher.start();
             Thread.sleep(50); // Give time for initialization
@@ -114,17 +107,17 @@ public class FileWatcherTest {
             watcher.stop();
         }).doesNotThrowAnyException();
     }
-    
+
     @Test
     public void testWatchResource() {
         // Test watching a resource file
         FileWatcher watcher = FileWatcher.getInstance();
-        
+
         // Should handle non-existent resources gracefully
         assertThatCode(() -> watcher.watchResource("non-existent-resource.properties"))
-            .doesNotThrowAnyException();
+                .doesNotThrowAnyException();
     }
-    
+
     @Test(timeOut = 5000)
     public void testFileChangeDetection() throws Exception {
         FileWatcher watcher = FileWatcher.getInstance();
@@ -165,8 +158,8 @@ public class FileWatcherTest {
             Files.writeString(testConfigFile, "test.key=modified_value\n");
 
             assertThat(valueUpdatedLatch.await(3, TimeUnit.SECONDS))
-                .as("Configuration value should update after reload")
-                .isTrue();
+                    .as("Configuration value should update after reload")
+                    .isTrue();
 
             assertThat(ConfigProvider.readTimeoutMs()).isEqualTo(2222);
         } finally {
@@ -209,12 +202,12 @@ public class FileWatcherTest {
             boolean reloaded = waitForReload(appender, initialCount, 2, TimeUnit.SECONDS);
 
             assertThat(reloaded)
-                .as("Configuration reload should occur after rapid file changes")
-                .isTrue();
+                    .as("Configuration reload should occur after rapid file changes")
+                    .isTrue();
 
             assertThat(appender.getCount() - initialCount)
-                .as("Reload should only be triggered once for rapid successive changes")
-                .isEqualTo(1);
+                    .as("Reload should only be triggered once for rapid successive changes")
+                    .isEqualTo(1);
         } finally {
             watcher.stop();
             logbackLogger.detachAppender(appender);
@@ -246,21 +239,21 @@ public class FileWatcherTest {
             boolean creationReload = waitForReload(appender, initialCount, 2, TimeUnit.SECONDS);
 
             assertThat(creationReload)
-                .as("Configuration reload should occur after watched file is created")
-                .isTrue();
+                    .as("Configuration reload should occur after watched file is created")
+                    .isTrue();
 
             int afterCreationCount = appender.getCount();
 
             boolean deleted = Files.deleteIfExists(testConfigFile);
             assertThat(deleted)
-                .as("Watched configuration file should be deleted for reload test")
-                .isTrue();
+                    .as("Watched configuration file should be deleted for reload test")
+                    .isTrue();
 
             boolean deletionReload = waitForReload(appender, afterCreationCount, 2, TimeUnit.SECONDS);
 
             assertThat(deletionReload)
-                .as("Configuration reload should occur after watched file is deleted")
-                .isTrue();
+                    .as("Configuration reload should occur after watched file is deleted")
+                    .isTrue();
         } finally {
             watcher.stop();
             logbackLogger.detachAppender(appender);

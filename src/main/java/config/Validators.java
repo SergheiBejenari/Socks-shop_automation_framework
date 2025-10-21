@@ -8,29 +8,29 @@ import java.util.Set;
  * Provides descriptive error messages that include the key, source, and invalid value.
  */
 public class Validators {
-    
+
     private static final Set<String> VALID_LOG_LEVELS = Set.of("TRACE", "DEBUG", "INFO", "WARN", "ERROR");
     private static final Set<String> VALID_APP_ENVS = Set.of("local", "dev", "ci", "qa", "stage", "prod");
-    
+
     /**
      * No-op validator for values that don't need validation.
      */
     public static <T> T noValidation(T value) {
         return value;
     }
-    
+
     /**
      * Validates that an integer is within the specified range (inclusive).
      */
     public static Object validateIntRange(Integer value, int min, int max) {
         if (value < min || value > max) {
             throw new IllegalArgumentException(
-                String.format("Value %d is not in valid range [%d, %d]", value, min, max)
+                    String.format("Value %d is not in valid range [%d, %d]", value, min, max)
             );
         }
         return value;
     }
-    
+
     /**
      * Validates that a URI is absolute and uses http or https scheme.
      */
@@ -38,39 +38,39 @@ public class Validators {
         if (!uri.isAbsolute()) {
             throw new IllegalStateException("URI must be absolute: " + uri);
         }
-        
+
         String scheme = uri.getScheme();
         if (scheme == null || (!scheme.equals("http") && !scheme.equals("https"))) {
             throw new IllegalStateException("URI must use http or https scheme: " + uri);
         }
-        
+
         return uri;
     }
-    
+
     /**
      * Validates log level against allowed values.
      */
     public static String validateLogLevel(String logLevel) {
         if (!VALID_LOG_LEVELS.contains(logLevel)) {
             throw new IllegalStateException(
-                "Invalid log level: '" + logLevel + "'. Must be one of: " + VALID_LOG_LEVELS
+                    "Invalid log level: '" + logLevel + "'. Must be one of: " + VALID_LOG_LEVELS
             );
         }
         return logLevel;
     }
-    
+
     /**
      * Validates app environment against allowed values.
      */
     public static String validateAppEnv(String appEnv) {
         if (!VALID_APP_ENVS.contains(appEnv)) {
             throw new IllegalStateException(
-                "Invalid app environment: '" + appEnv + "'. Must be one of: " + VALID_APP_ENVS
+                    "Invalid app environment: '" + appEnv + "'. Must be one of: " + VALID_APP_ENVS
             );
         }
         return appEnv;
     }
-    
+
     /**
      * Validates browser type against supported browsers.
      */
@@ -78,12 +78,12 @@ public class Validators {
         Set<String> validBrowsers = Set.of("chrome", "firefox", "edge", "safari", "chromium");
         if (!validBrowsers.contains(browserType.toLowerCase())) {
             throw new IllegalArgumentException(
-                String.format("Invalid browser type '%s'. Valid options: %s", browserType, validBrowsers)
+                    String.format("Invalid browser type '%s'. Valid options: %s", browserType, validBrowsers)
             );
         }
         return browserType;
     }
-    
+
     /**
      * Validates proxy configuration consistency.
      * If proxy is enabled, host must be non-empty and port must be > 0.

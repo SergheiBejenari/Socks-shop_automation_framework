@@ -1,22 +1,17 @@
 package config;
+
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * File watcher service that monitors configuration files for changes
  * and triggers automatic reloads of the ConfigProvider.
  */
 public class FileWatcher {
-    
+
     private static final FileWatcher INSTANCE = new FileWatcher();
     private final WatchService watchService;
     private final ExecutorService executor;
@@ -46,11 +41,11 @@ public class FileWatcher {
             throw new RuntimeException("Failed to initialize file watcher", e);
         }
     }
-    
+
     public static FileWatcher getInstance() {
         return INSTANCE;
     }
-    
+
     /**
      * Start watching configuration files for changes.
      * This method is idempotent - calling it multiple times has no effect.
@@ -61,7 +56,7 @@ public class FileWatcher {
             ConfigLogging.info("Configuration file watcher started");
         }
     }
-    
+
     /**
      * Stop the file watcher service.
      */
@@ -78,9 +73,10 @@ public class FileWatcher {
             }
         }
     }
-    
+
     /**
      * Add a file to be watched for changes.
+     *
      * @param filePath Path to the file to watch
      */
     public void watchFile(Path filePath) {
@@ -105,9 +101,9 @@ public class FileWatcher {
             try {
                 if (watchedDirectories.add(directory)) {
                     directory.register(watchService,
-                        StandardWatchEventKinds.ENTRY_MODIFY,
-                        StandardWatchEventKinds.ENTRY_CREATE,
-                        StandardWatchEventKinds.ENTRY_DELETE);
+                            StandardWatchEventKinds.ENTRY_MODIFY,
+                            StandardWatchEventKinds.ENTRY_CREATE,
+                            StandardWatchEventKinds.ENTRY_DELETE);
                     directoryRegisteredHere = true;
                 }
 
@@ -127,9 +123,10 @@ public class FileWatcher {
             ConfigLogging.debug("File already being watched: {}", normalizedFilePath);
         }
     }
-    
+
     /**
      * Add a resource file to be watched (converts resource path to actual file path).
+     *
      * @param resourcePath Resource path (e.g., "application.properties")
      */
     public void watchResource(String resourcePath) {
@@ -145,21 +142,21 @@ public class FileWatcher {
             ConfigLogging.debug("Cannot watch resource {}: {}", resourcePath, e.getMessage());
         }
     }
-    
+
     private void watchLoop() {
         ConfigLogging.debug("File watcher loop started");
-        
+
         while (running.get()) {
             try {
                 WatchKey key = watchService.take();
-                
+
                 for (WatchEvent<?> event : key.pollEvents()) {
                     WatchEvent.Kind<?> kind = event.kind();
-                    
+
                     if (kind == StandardWatchEventKinds.OVERFLOW) {
                         continue;
                     }
-                    
+
                     @SuppressWarnings("unchecked")
                     WatchEvent<Path> pathEvent = (WatchEvent<Path>) event;
                     Path fileName = pathEvent.context();
@@ -178,7 +175,7 @@ public class FileWatcher {
                     ConfigLogging.warn("Watch key no longer valid, stopping file watcher");
                     break;
                 }
-                
+
             } catch (InterruptedException e) {
                 ConfigLogging.debug("File watcher interrupted");
                 Thread.currentThread().interrupt();
@@ -188,7 +185,7 @@ public class FileWatcher {
                 ConfigLogging.debug("File watcher error details", e);
             }
         }
-        
+
         ConfigLogging.debug("File watcher loop ended");
     }
 

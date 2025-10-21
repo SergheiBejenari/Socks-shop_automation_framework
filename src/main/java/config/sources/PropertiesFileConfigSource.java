@@ -1,7 +1,7 @@
 package config.sources;
 
-import config.ConfigSource;
 import config.ConfigLogging;
+import config.ConfigSource;
 
 import java.io.IOException;
 import java.io.InputStream;
