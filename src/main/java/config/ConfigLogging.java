@@ -52,8 +52,19 @@ public class ConfigLogging {
      * Log configuration fallback to default values.
      */
     public static void logDefaultValue(String key, Object defaultValue) {
+        Object valueToLog = defaultValue;
+
+        try {
+            ConfigKey configKey = ConfigKey.valueOf(key);
+            if (configKey.isSecret() && defaultValue != null) {
+                valueToLog = SecretMasker.mask(defaultValue.toString());
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Key is not part of ConfigKey enum; fall back to the provided value.
+        }
+
         logger.withContext("configKey", key)
-                .debug("Using default value for {}: {}", key, defaultValue);
+                .debug("Using default value for {}: {}", key, valueToLog);
     }
 
     /**

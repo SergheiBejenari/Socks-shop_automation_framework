@@ -4,7 +4,9 @@ import config.sources.DotEnvFileConfigSource;
 import config.sources.PropertiesFileConfigSource;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -19,9 +21,47 @@ public class ConfigProvider {
     private static final Object LOCK = new Object();
     private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
     private static final AtomicBoolean LOGGED_ONCE = new AtomicBoolean(false);
+    private static final CopyOnWriteArrayList<ConfigSource> ADDITIONAL_SOURCES = new CopyOnWriteArrayList<>();
 
-    static {
-        initialize();
+    public static void registerSource(ConfigSource source) {
+        Objects.requireNonNull(source, "source");
+        boolean added = ADDITIONAL_SOURCES.addIfAbsent(source);
+
+        if (added && INITIALIZED.get()) {
+            reload("Additional config source registered: " + source.id());
+        }
+    }
+
+    public static void registerSources(Collection<? extends ConfigSource> sources) {
+        if (sources == null || sources.isEmpty()) {
+            return;
+        }
+
+        boolean added = false;
+        for (ConfigSource source : sources) {
+            Objects.requireNonNull(source, "source");
+            added |= ADDITIONAL_SOURCES.addIfAbsent(source);
+        }
+
+        if (added && INITIALIZED.get()) {
+            reload("Additional config sources registered");
+        }
+    }
+
+    static void clearAdditionalSources() {
+        if (ADDITIONAL_SOURCES.isEmpty()) {
+            return;
+        }
+
+        ADDITIONAL_SOURCES.clear();
+
+        if (INITIALIZED.get()) {
+            reload("Additional config sources cleared");
+        }
+    }
+
+    private static List<ConfigSource> snapshotAdditionalSources() {
+        return List.copyOf(ADDITIONAL_SOURCES);
     }
 
     /**
@@ -196,11 +236,9 @@ public class ConfigProvider {
     public static void reload(String reason) {
         ConfigLogging.logReload(reason);
         synchronized (LOCK) {
-            snapshot = buildSnapshot();
-            INITIALIZED.set(true);
-            LOGGED_ONCE.set(false); // Reset flag to allow re-logging after reload
-            startFileWatcher();
-            logConfigurationOnce();
+            String profile = resolveProfile();
+            CompositeConfig config = createCompositeConfig(profile);
+            rebuildState(config, profile);
         }
     }
 
@@ -243,11 +281,10 @@ public class ConfigProvider {
 
     private static void initialize() {
         synchronized (LOCK) {
-            if (snapshot == null) {
-                snapshot = buildSnapshot();
-                INITIALIZED.set(true);
-                startFileWatcher();
-                logConfigurationOnce();
+            if (!INITIALIZED.get()) {
+                String profile = resolveProfile();
+                CompositeConfig config = createCompositeConfig(profile);
+                rebuildState(config, profile);
             }
         }
     }
@@ -262,31 +299,47 @@ public class ConfigProvider {
         }
     }
 
+    private static void rebuildState(CompositeConfig config, String profile) {
+        ConfigLogging.logConfigInit(profile, "Building configuration snapshot");
+        snapshot = buildSnapshot(config);
+        INITIALIZED.set(true);
+        LOGGED_ONCE.set(false); // Reset flag to allow re-logging after reload
+        startFileWatcher(config, profile);
+        logConfigurationOnce();
+    }
+
+    private static CompositeConfig createCompositeConfig(String profile) {
+        return new CompositeConfig(profile, snapshotAdditionalSources());
+    }
+
     /**
      * Start the file watcher to monitor configuration files for changes.
      */
-    private static void startFileWatcher() {
+    private static void startFileWatcher(CompositeConfig config, String profile) {
         try {
             FileWatcher watcher = FileWatcher.getInstance();
-            String profile = resolveProfile();
-
-            // Create CompositeConfig to get actual file paths being used
-            CompositeConfig config = new CompositeConfig(profile);
-
             // Watch the actual configuration files being used
-            watcher.watchResource(config.getBaseFilename());
-            watcher.watchResource(config.getProfileFilename());
-            watcher.watchResource(config.getDotEnvPath());
+            watcher.watchResource(config.getBaseFilename(), config.getBaseFilePath().orElse(null));
+            watcher.watchResource(config.getProfileFilename(), config.getProfileFilePath().orElse(null));
+            config.getDotEnvFilePath()
+                    .ifPresentOrElse(watcher::watchFile, () -> watcher.watchResource(config.getDotEnvPath()));
 
             // Start the watcher service
             watcher.start();
 
             ConfigLogging.debug("File watcher configured for profile: {} - watching: {}, {}, {}",
-                    profile, config.getBaseFilename(), config.getProfileFilename(), config.getDotEnvPath());
+                    profile,
+                    describeWatchTarget(config.getBaseFilename(), config.getBaseFilePath()),
+                    describeWatchTarget(config.getProfileFilename(), config.getProfileFilePath()),
+                    config.getDotEnvFilePath().map(Path::toString).orElse(config.getDotEnvPath()));
         } catch (Exception e) {
             ConfigLogging.warn("Failed to start file watcher: {} - automatic reload disabled", e.getMessage());
             ConfigLogging.debug("File watcher startup error details", e);
         }
+    }
+
+    private static String describeWatchTarget(String resource, Optional<Path> path) {
+        return path.map(Path::toString).orElse(resource);
     }
 
     private static void logConfigurationOnce() {
@@ -295,14 +348,7 @@ public class ConfigProvider {
         }
     }
 
-    private static Map<ConfigKey, Object> buildSnapshot() {
-        // First resolve the profile
-        String profile = resolveProfile();
-        ConfigLogging.logConfigInit(profile, "Building configuration snapshot");
-
-        // Create composite config with resolved profile using standard naming
-        CompositeConfig config = new CompositeConfig(profile);
-
+    private static Map<ConfigKey, Object> buildSnapshot(CompositeConfig config) {
         Map<ConfigKey, Object> values = new EnumMap<>(ConfigKey.class);
 
         // Process all configuration keys

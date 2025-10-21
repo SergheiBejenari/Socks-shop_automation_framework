@@ -48,6 +48,7 @@ public class ConfigProviderTest {
         }
         System.clearProperty("app.env");
 
+        ConfigProvider.clearAdditionalSources();
         // Force reload to get clean state
         ConfigProvider.reload();
     }
@@ -64,6 +65,7 @@ public class ConfigProviderTest {
 
         // Environment variables are automatically restored by SystemLambda
 
+        ConfigProvider.clearAdditionalSources();
         // Reload to restore original state
         ConfigProvider.reload();
     }
@@ -823,4 +825,71 @@ public class ConfigProviderTest {
         assertThat(testConfig.get("BASIC_AUTH_PASSWORD")).hasValue("env_password");
     }
 
+    @Test
+    public void testSecretDefaultValueMaskedInLogs() {
+        Logger logger = (Logger) LoggerFactory.getLogger("config");
+        Level originalLevel = logger.getLevel();
+        logger.setLevel(Level.DEBUG);
+
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            ConfigLogging.logDefaultValue(ConfigKey.BASIC_AUTH_PASSWORD.name(), "super-secret");
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+            logger.setLevel(originalLevel);
+        }
+
+        assertThat(appender.list)
+                .extracting(ILoggingEvent::getFormattedMessage)
+                .anyMatch(message -> message.contains("su********et"));
+
+        assertThat(appender.list)
+                .extracting(ILoggingEvent::getFormattedMessage)
+                .noneMatch(message -> message.contains("super-secret"));
+    }
+
+    @Test
+    public void testAdditionalConfigSourceOverridesProperties() {
+        ConfigProvider.clearAdditionalSources();
+
+        Map<String, String> overrides = new HashMap<>();
+        overrides.put(ConfigKey.READ_TIMEOUT_MS.name(), "4321");
+        overrides.put(ConfigKey.READ_TIMEOUT_MS.getSysPropName(), "4321");
+
+        ConfigProvider.registerSource(new InMemoryConfigSource("test-source", overrides));
+
+        assertThat(ConfigProvider.readTimeoutMs()).isEqualTo(4321);
+
+        ConfigProvider.clearAdditionalSources();
+        ConfigProvider.reload();
+    }
+
+    private static final class InMemoryConfigSource implements ConfigSource {
+        private final Map<String, String> values;
+        private final String id;
+
+        private InMemoryConfigSource(String id, Map<String, String> values) {
+            this.id = id;
+            this.values = Map.copyOf(values);
+        }
+
+        @Override
+        public Optional<String> get(String name) {
+            return Optional.ofNullable(values.get(name));
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public Set<String> getAllKeys() {
+            return values.keySet();
+        }
+    }
 }
