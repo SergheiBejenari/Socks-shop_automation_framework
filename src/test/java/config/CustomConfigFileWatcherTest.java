@@ -59,12 +59,22 @@ public class CustomConfigFileWatcherTest {
     @Test
     public void testCompositeConfigStoresActualFilePaths() {
         // Test that CompositeConfig stores and exposes the actual file paths being used
-        CompositeConfig config = new CompositeConfig("test", "my-app-%s.properties", "my-app-base.properties", "custom.env");
+        String profilePattern = tempDir.resolve("my-app-%s.properties").toString();
+        CompositeConfig config = new CompositeConfig(
+                "test",
+                profilePattern,
+                customBaseFile.toString(),
+                customEnvFile.toString()
+        );
 
         // Verify that the getters return the actual paths
-        assertThat(config.getBaseFilename()).isEqualTo("my-app-base.properties");
-        assertThat(config.getProfileFilename()).isEqualTo("my-app-test.properties");
-        assertThat(config.getDotEnvPath()).isEqualTo("custom.env");
+        assertThat(config.getBaseFilename()).isEqualTo(customBaseFile.toString());
+        assertThat(config.getProfileFilename()).isEqualTo(String.format(profilePattern, "test"));
+        assertThat(config.getDotEnvPath()).isEqualTo(customEnvFile.toString());
+
+        assertThat(config.getBaseFilePath()).contains(customBaseFile.toAbsolutePath().normalize());
+        assertThat(config.getProfileFilePath()).contains(customProfileFile.toAbsolutePath().normalize());
+        assertThat(config.getDotEnvFilePath()).contains(customEnvFile.toAbsolutePath().normalize());
     }
 
     @Test
@@ -94,9 +104,9 @@ public class CustomConfigFileWatcherTest {
 
         // Should handle custom file paths without throwing exceptions
         assertThatCode(() -> {
-            watcher.watchFile(customBaseFile);
-            watcher.watchFile(customProfileFile);
-            watcher.watchFile(customEnvFile);
+            watcher.watchResource("my-app-base.properties", customBaseFile);
+            watcher.watchResource("my-app-test.properties", customProfileFile);
+            watcher.watchResource("custom.env", customEnvFile);
         }).doesNotThrowAnyException();
     }
 
@@ -105,13 +115,18 @@ public class CustomConfigFileWatcherTest {
         // Test that custom configuration files can be accessed through resource paths
         // This simulates how the actual system would work with custom file names
 
-        // Create a CompositeConfig with custom file patterns
-        CompositeConfig config = new CompositeConfig("test", "my-app-%s.properties", "my-app-base.properties", "custom.env");
+        String profilePattern = tempDir.resolve("my-app-%s.properties").toString();
+        CompositeConfig config = new CompositeConfig(
+                "test",
+                profilePattern,
+                customBaseFile.toString(),
+                customEnvFile.toString()
+        );
 
         // Verify the configuration knows about the custom files
-        assertThat(config.getBaseFilename()).isEqualTo("my-app-base.properties");
-        assertThat(config.getProfileFilename()).isEqualTo("my-app-test.properties");
-        assertThat(config.getDotEnvPath()).isEqualTo("custom.env");
+        assertThat(config.getBaseFilename()).isEqualTo(customBaseFile.toString());
+        assertThat(config.getProfileFilename()).isEqualTo(String.format(profilePattern, "test"));
+        assertThat(config.getDotEnvPath()).isEqualTo(customEnvFile.toString());
 
         // Verify sources are created with correct IDs
         assertThat(config.getSources()).hasSize(5);
@@ -127,8 +142,8 @@ public class CustomConfigFileWatcherTest {
         // Should handle non-existent resources without throwing
         assertThatCode(() -> {
             watcher.watchResource("my-app-base.properties");
-            watcher.watchResource("my-app-test.properties");
-            watcher.watchResource("custom.env");
+            watcher.watchResource("my-app-test.properties", customProfileFile);
+            watcher.watchResource("custom.env", customEnvFile);
         }).doesNotThrowAnyException();
     }
 
@@ -163,8 +178,8 @@ public class CustomConfigFileWatcherTest {
                 }
             });
 
-            watcher.watchFile(customBaseFile);
-            watcher.watchFile(customProfileFile);
+            watcher.watchResource("my-app-base.properties", customBaseFile);
+            watcher.watchResource("my-app-test.properties", customProfileFile);
             watcher.start();
 
             System.setProperty(propertyName, "3200");
@@ -209,9 +224,9 @@ public class CustomConfigFileWatcherTest {
         // FileWatcher should be able to handle these paths
         FileWatcher watcher = FileWatcher.getInstance();
         assertThatCode(() -> {
-            watcher.watchResource(config.getBaseFilename());
-            watcher.watchResource(config.getProfileFilename());
-            watcher.watchResource(config.getDotEnvPath());
+            watcher.watchResource(config.getBaseFilename(), config.getBaseFilePath().orElse(null));
+            watcher.watchResource(config.getProfileFilename(), config.getProfileFilePath().orElse(null));
+            watcher.watchResource(config.getDotEnvPath(), config.getDotEnvFilePath().orElse(null));
         }).doesNotThrowAnyException();
     }
 }

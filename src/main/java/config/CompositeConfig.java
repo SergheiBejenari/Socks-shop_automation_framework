@@ -5,6 +5,8 @@ import config.sources.EnvConfigSource;
 import config.sources.PropertiesFileConfigSource;
 import config.sources.SystemPropsConfigSource;
 
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +20,9 @@ public class CompositeConfig implements ConfigSource {
     private final String profileFilename;
     private final String baseFilename;
     private final String dotEnvPath;
+    private final Path profileFilePath;
+    private final Path baseFilePath;
+    private final Path dotEnvFilePath;
 
     // Default file naming patterns
     private static final String DEFAULT_PROFILE_PATTERN = "application-%s.properties";
@@ -28,7 +33,11 @@ public class CompositeConfig implements ConfigSource {
     private static final String LEGACY_BASE_FILENAME = "configuration.properties";
 
     public CompositeConfig(String profile) {
-        this(profile, DEFAULT_PROFILE_PATTERN, DEFAULT_BASE_FILENAME);
+        this(profile, DEFAULT_PROFILE_PATTERN, DEFAULT_BASE_FILENAME, ".env", List.of());
+    }
+
+    public CompositeConfig(String profile, List<ConfigSource> additionalSources) {
+        this(profile, DEFAULT_PROFILE_PATTERN, DEFAULT_BASE_FILENAME, ".env", additionalSources);
     }
 
     /**
@@ -39,7 +48,7 @@ public class CompositeConfig implements ConfigSource {
      * @param baseFilename   the base configuration filename (e.g., "application.properties")
      */
     public CompositeConfig(String profile, String profilePattern, String baseFilename) {
-        this(profile, profilePattern, baseFilename, ".env");
+        this(profile, profilePattern, baseFilename, ".env", List.of());
     }
 
     /**
@@ -51,17 +60,34 @@ public class CompositeConfig implements ConfigSource {
      * @param dotEnvPath     the path to the .env file
      */
     public CompositeConfig(String profile, String profilePattern, String baseFilename, String dotEnvPath) {
+        this(profile, profilePattern, baseFilename, dotEnvPath, List.of());
+    }
+
+    public CompositeConfig(String profile, String profilePattern, String baseFilename, String dotEnvPath,
+                            List<ConfigSource> additionalSources) {
         this.profileFilename = String.format(profilePattern, profile);
         this.baseFilename = baseFilename;
         this.dotEnvPath = dotEnvPath;
 
-        this.sources = List.of(
-                new EnvConfigSource(),
-                new SystemPropsConfigSource(),
-                new PropertiesFileConfigSource(this.profileFilename, "profile:" + profile),
-                new PropertiesFileConfigSource(this.baseFilename, "base"),
-                new DotEnvFileConfigSource(this.dotEnvPath)
-        );
+        PropertiesFileConfigSource profileSource = new PropertiesFileConfigSource(this.profileFilename, "profile:" + profile);
+        PropertiesFileConfigSource baseSource = new PropertiesFileConfigSource(this.baseFilename, "base");
+        DotEnvFileConfigSource dotEnvSource = new DotEnvFileConfigSource(this.dotEnvPath);
+
+        this.profileFilePath = profileSource.getResolvedPath().map(Path::toAbsolutePath).map(Path::normalize).orElse(null);
+        this.baseFilePath = baseSource.getResolvedPath().map(Path::toAbsolutePath).map(Path::normalize).orElse(null);
+        this.dotEnvFilePath = dotEnvSource.getPath();
+
+        List<ConfigSource> orderedSources = new ArrayList<>();
+        orderedSources.add(new EnvConfigSource());
+        orderedSources.add(new SystemPropsConfigSource());
+        if (additionalSources != null) {
+            orderedSources.addAll(additionalSources);
+        }
+        orderedSources.add(profileSource);
+        orderedSources.add(baseSource);
+        orderedSources.add(dotEnvSource);
+
+        this.sources = List.copyOf(orderedSources);
     }
 
     /**
@@ -69,7 +95,7 @@ public class CompositeConfig implements ConfigSource {
      * Uses configuration-{profile}.properties and configuration.properties patterns.
      */
     public static CompositeConfig withLegacyNaming(String profile) {
-        return new CompositeConfig(profile, LEGACY_PROFILE_PATTERN, LEGACY_BASE_FILENAME);
+        return new CompositeConfig(profile, LEGACY_PROFILE_PATTERN, LEGACY_BASE_FILENAME, ".env", List.of());
     }
 
     @Override
@@ -115,6 +141,10 @@ public class CompositeConfig implements ConfigSource {
         return profileFilename;
     }
 
+    public Optional<Path> getProfileFilePath() {
+        return Optional.ofNullable(profileFilePath);
+    }
+
     /**
      * Returns the base properties filename being used.
      */
@@ -122,10 +152,18 @@ public class CompositeConfig implements ConfigSource {
         return baseFilename;
     }
 
+    public Optional<Path> getBaseFilePath() {
+        return Optional.ofNullable(baseFilePath);
+    }
+
     /**
      * Returns the .env file path being used.
      */
     public String getDotEnvPath() {
         return dotEnvPath;
+    }
+
+    public Optional<Path> getDotEnvFilePath() {
+        return Optional.ofNullable(dotEnvFilePath);
     }
 }

@@ -39,7 +39,7 @@ public class DotEnvFileConfigSource implements ConfigSource {
      * @param dotEnvPath the path to the .env file
      */
     public DotEnvFileConfigSource(Path dotEnvPath) {
-        this.dotEnvPath = dotEnvPath;
+        this.dotEnvPath = dotEnvPath.toAbsolutePath().normalize();
         this.envVars = loadDotEnvFile();
     }
 
@@ -51,6 +51,10 @@ public class DotEnvFileConfigSource implements ConfigSource {
      */
     public DotEnvFileConfigSource(String dotEnvFilePath) {
         this(Paths.get(dotEnvFilePath));
+    }
+
+    public Path getPath() {
+        return dotEnvPath;
     }
 
     @Override

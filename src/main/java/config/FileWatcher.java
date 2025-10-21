@@ -130,6 +130,18 @@ public class FileWatcher {
      * @param resourcePath Resource path (e.g., "application.properties")
      */
     public void watchResource(String resourcePath) {
+        watchResource(resourcePath, null);
+    }
+
+    public void watchResource(String resourcePath, Path explicitPath) {
+        if (explicitPath != null) {
+            watchFile(explicitPath);
+        }
+
+        if (resourcePath == null || resourcePath.isEmpty()) {
+            return;
+        }
+
         try {
             var resource = getClass().getClassLoader().getResource(resourcePath);
             if (resource != null && "file".equals(resource.getProtocol())) {
